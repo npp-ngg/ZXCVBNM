@@ -1,0 +1,86 @@
+plugins{
+    id'com.android.application'
+}
+//
+// Android設定
+android{
+    compileSdk 34
+    defaultConfig{
+        applicationId"jp.zxcvbnm"
+        minSdk 30
+        versionCode 1
+        versionName '0.1'
+        resValue"string","version_name",versionName
+        testInstrumentationRunner"androidx.test.runner.AndroidJUnitRunner"
+        signingConfig signingConfigs.debug
+        targetSdk 30
+    }
+    buildTypes{
+        release{
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+        debug{
+            ext.enableCrashlytics=false
+        }
+    }
+    compileOptions{
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildFeatures{
+        resValues true
+    }
+    namespace'jp.zxcvbnm'
+}
+//
+// 依存関係
+dependencies{
+    implementation'androidx.appcompat:appcompat:1.7.1'
+    implementation'androidx.preference:preference:1.2.1'
+    implementation'com.google.android.material:material:1.13.0'
+    implementation'androidx.constraintlayout:constraintlayout:2.2.1'
+    implementation'androidx.gridlayout:gridlayout:1.0.0'
+    implementation'com.google.code.findbugs:jsr305:3.0.2'
+    implementation'com.google.guava:guava:33.5.0-jre'
+    implementation'androidx.preference:preference-ktx:1.2.1'
+    implementation'com.google.protobuf:protobuf-java:4.28.2'
+    implementation project(':mozc-client')
+    testImplementation'junit:junit:4.13.2'
+    androidTestImplementation'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation'androidx.test.espresso:espresso-core:3.6.1'
+}
+//
+// バージョンインクリメントタスク
+tasks.register("incrementVersion"){
+    def propertiesFile=file("src/main/buildnumber")
+    def buildnumberFile=file('src/main/res/values/buildnumber.xml')
+    doLast{
+        if(!propertiesFile.exists()){
+            propertiesFile.parentFile.mkdirs()
+            propertiesFile.createNewFile()
+            propertiesFile.text="buildnumber=0"
+        }
+        def properties=new Properties()
+        propertiesFile.withReader{reader->properties.load(reader)}
+        def buildNumber=properties['buildnumber']?:'0'
+        def bn=buildNumber.toInteger()+1
+        println"buildnumber: $bn"
+        properties['buildnumber']=bn.toString()
+        propertiesFile.withWriter{writer->properties.store(writer,null)}
+        if(!buildnumberFile.parentFile.exists()){
+            buildnumberFile.parentFile.mkdirs()
+        }
+        buildnumberFile.text="""\
+            |<resources>
+            | <integer name="build_number">$bn</integer>
+            |</resources>\
+        """.stripMargin()
+    }
+}
+//
+// ビルド前処理
+tasks.named("preBuild"){
+    dependsOn("incrementVersion")
+}

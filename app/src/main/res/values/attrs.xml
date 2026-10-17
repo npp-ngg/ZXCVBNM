@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="KeyboardKey">
+        <attr name="btnLabelA" format="string" />
+        <attr name="btnLabelAS" format="string" />
+        <attr name="btnLabelJ" format="string" />
+        <attr name="btnLabelJS" format="string" />
+        <attr name="btnLabelJP109" format="string" />
+        <attr name="btnLabelJP109S" format="string" />
+        <attr name="btnCodeA" format="integer" />
+        <attr name="btnCodeAS" format="integer" />
+        <attr name="btnCodeJ" format="integer" />
+        <attr name="btnCodeJS" format="integer" />
+        <attr name="btnCodeJP109" format="integer" />
+        <attr name="btnCodeJP109S" format="integer" />
+        <attr name="btnCodeLongTap" format="integer" />
+    </declare-styleable>
+</resources>

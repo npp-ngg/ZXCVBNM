@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:android="http://schemas.android.com/apk/res/android">
+    <item name="category_selector_major_number" type="id" />
+    <item name="category_selector_major_symbol" type="id" />
+    <item name="category_selector_major_emoticon" type="id" />
+    <item name="category_selector_major_emoji" type="id" />
+</resources>
