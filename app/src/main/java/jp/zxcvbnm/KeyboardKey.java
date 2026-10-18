@@ -61,17 +61,19 @@ public class KeyboardKey extends AppCompatButton {
             if((btnLabelJP109S=a.getString(R.styleable.KeyboardKey_btnLabelJP109S))==null)btnLabelJP109S=NULL_STRING;
 //
             if((btnCodeA=a.getInt(R.styleable.KeyboardKey_btnCodeA,C.Key.KEY_NULL))==C.Key.KEY_NULL)
-                btnCodeA=btnLabelA.charAt(0);
+                if(!btnLabelA.isEmpty())btnCodeA=btnLabelA.charAt(0);
             if((btnCodeAS=a.getInt(R.styleable.KeyboardKey_btnCodeAS,C.Key.KEY_NULL))==C.Key.KEY_NULL)
-                btnCodeAS=btnLabelAS.charAt(0);
+                if(!btnLabelAS.isEmpty())btnCodeAS=btnLabelAS.charAt(0);
             if((btnCodeJ=a.getInt(R.styleable.KeyboardKey_btnCodeJ,C.Key.KEY_NULL))==C.Key.KEY_NULL)
-                btnCodeJ=btnLabelJ.charAt(0);
+                if(!btnLabelJ.isEmpty())btnCodeJ=btnLabelJ.charAt(0);
             if((btnCodeJS=a.getInt(R.styleable.KeyboardKey_btnCodeJS,C.Key.KEY_NULL))==C.Key.KEY_NULL)
                 if(!btnLabelJS.isEmpty())btnCodeJS=btnLabelJS.charAt(0);
             if((btnCodeJP109=a.getInt(R.styleable.KeyboardKey_btnCodeJP109,C.Key.KEY_NULL))==C.Key.KEY_NULL)
                 if(!btnLabelJP109.isEmpty())btnCodeJP109=btnLabelJP109.charAt(0);
             if((btnCodeJP109S=a.getInt(R.styleable.KeyboardKey_btnCodeJP109S,C.Key.KEY_NULL))==C.Key.KEY_NULL)
                 if(!btnLabelJP109S.isEmpty())btnCodeJP109S=btnLabelJP109S.charAt(0);
+            if(btnCodeJ==C.Key.KEY_NULL)btnCodeJ=btnCodeA;
+            if(btnCodeJS==C.Key.KEY_NULL)btnCodeJS=btnCodeAS;
             btnCodeLongTap=a.getInt(R.styleable.KeyboardKey_btnCodeLongTap,C.Key.KEY_NULL);
         }finally{
             a.recycle();
@@ -88,10 +90,16 @@ public class KeyboardKey extends AppCompatButton {
     }
 //
     public String getBtnLabelJ() {
+        if(btnLabelJ==null||btnLabelJ.isEmpty()){
+            return btnLabelA;
+        }
         return btnLabelJ;
     }
 //
     public String getBtnLabelJS() {
+        if(btnLabelJS==null||btnLabelJS.isEmpty()){
+            return btnLabelAS;
+        }
         return btnLabelJS;
     }
 //
@@ -112,10 +120,16 @@ public class KeyboardKey extends AppCompatButton {
     }
 //
     public int getBtnCodeJ() {
+        if(btnCodeJ==C.Key.KEY_NULL){
+            return btnCodeA;
+        }
         return btnCodeJ;
     }
 //
     public int getBtnCodeJS() {
+        if(btnCodeJS==C.Key.KEY_NULL){
+            return btnCodeAS;
+        }
         return btnCodeJS;
     }
 //
