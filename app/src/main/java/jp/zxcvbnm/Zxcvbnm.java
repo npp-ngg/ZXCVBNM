@@ -1,12 +1,17 @@
 package jp.zxcvbnm;
 //
 import android.inputmethodservice.InputMethodService;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.widget.PopupWindow;
+import android.widget.TextView;
 import com.google.android.apps.inputmethod.libs.mozc.session.MozcJNI;
 import org.mozc.android.inputmethod.japanese.MozcLog;
 //
@@ -30,6 +35,16 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // ビュー保持用フィールド
     private View keyboardView;
     private CandidateTextView candidateTextView;
+//
+// ポップアッププレビュー保持用フィールド
+    private PopupWindow keyPreviewPopup;
+    private TextView keyPreviewText;
+    private final Handler popupHandler=new Handler(Looper.getMainLooper());
+    private final Runnable dismissPopupRunnable=new Runnable() {
+        @Override public void run() {
+            dismissKeyPreview();
+        }
+    };
 //
 // サービス作成時の初期化処理
     @Override public void onCreate() {
@@ -64,6 +79,12 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     @Override public void onStartInputView(EditorInfo info,boolean restarting) {
         super.onStartInputView(info,restarting);
         updateKeyboardKeys();
+    }
+//
+// 入力終了時の処理
+    @Override public void onFinishInputView(boolean finishingInput) {
+        super.onFinishInputView(finishingInput);
+        dismissKeyPreview();
     }
 //
 // キーイベントリスナーの全キーへの設定処理
@@ -109,30 +130,41 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // モードおよびシフト状態に応じたキーラベル取得処理
     private String getKeyLabel(KeyboardKey key,boolean shifted) {
         String label=null;
-        switch(currentMode){
-            case MODE_JAPANESE:
-                label=shifted?key.getBtnLabelJS():key.getBtnLabelJ();
-                if(label==null||label.isEmpty()){
-                    label=shifted?key.getBtnLabelAS():key.getBtnLabelA();
-                }
-                break;
-            case MODE_ALPHABET:
-                label=shifted?key.getBtnLabelAS():key.getBtnLabelA();
-                if(label==null||label.isEmpty()){
+        if(shifted){
+            switch(currentMode){
+                case MODE_JAPANESE:
+                    label=key.getBtnLabelJS();
+                    break;
+                case MODE_ALPHABET:
+                    label=key.getBtnLabelAS();
+                    break;
+                case MODE_JP109:
+                    label=key.getBtnLabelJP109S();
+                    break;
+            }
+        }else{
+            switch(currentMode){
+                case MODE_JAPANESE:
+                    label=key.getBtnLabelJ();
+                    if(label==null||label.isEmpty()){
+                        label=key.getBtnLabelA();
+                    }
+                    break;
+                case MODE_ALPHABET:
                     label=key.getBtnLabelA();
-                }
-                break;
-            case MODE_JP109:
-                label=shifted?key.getBtnLabelJP109S():key.getBtnLabelJP109();
-                if(label==null||label.isEmpty()){
+                    break;
+                case MODE_JP109:
                     label=key.getBtnLabelJP109();
-                }
-                break;
+                    if(label==null||label.isEmpty()){
+                        label=key.getBtnLabelA();
+                    }
+                    break;
+            }
+            if(label==null||label.isEmpty()){
+                label=key.getBtnLabelA();
+            }
         }
-        if(label==null||label.isEmpty()){
-            label=key.getBtnLabelA();
-        }
-        return label;
+        return label!=null?label:"";
     }
 //
     private String getKeyLabel(KeyboardKey key) {
@@ -242,7 +274,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         processKeyAction(code,label);
     }
 //
-// キーのタッチイベント処理 (下フリック検出)
+// キーのタッチイベント処理 (下フリック検出・キープレビュー表示)
     @Override public boolean onTouch(View v,MotionEvent event) {
         if(!(v instanceof KeyboardKey)){
             return false;
@@ -253,20 +285,25 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         float flickThreshold=20.0f*density;
         switch(action){
             case MotionEvent.ACTION_DOWN:
-// タッチ開始座標保持
+// タッチ開始座標保持およびプレビュー表示
                 touchDownX=event.getX();
                 touchDownY=event.getY();
                 isFlickDown=false;
+                showKeyPreview(key,false);
                 return false;
             case MotionEvent.ACTION_MOVE:
-// 下フリック状態判定
+// 下フリック状態判定およびプレビュー更新
                 float deltaY=event.getY()-touchDownY;
                 float deltaX=event.getX()-touchDownX;
-                if(deltaY>flickThreshold&&deltaY>Math.abs(deltaX)){
-                    isFlickDown=true;
+                boolean newFlickDown=(deltaY>flickThreshold&&deltaY>Math.abs(deltaX));
+                if(newFlickDown!=isFlickDown){
+                    isFlickDown=newFlickDown;
+                    showKeyPreview(key,isFlickDown);
                 }
                 return false;
             case MotionEvent.ACTION_UP:
+// キープレビュー非表示
+//                dismissKeyPreview();
 // 下フリック確定時の入力実行
                 float upDeltaY=event.getY()-touchDownY;
                 float upDeltaX=event.getX()-touchDownX;
@@ -279,7 +316,8 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 isFlickDown=false;
                 return false;
             case MotionEvent.ACTION_CANCEL:
-// タッチキャンセル処理
+// タッチキャンセル処理およびプレビュー非表示
+                dismissKeyPreview();
                 isFlickDown=false;
                 return false;
         }
@@ -298,10 +336,62 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         int codeLong=key.getBtnCodeLongTap();
         if(codeLong!=-1){
             if(codeLong>0){
+                dismissKeyPreview();
                 sendKeyChar((char)codeLong);
                 return true;
             }
         }
         return false;
+    }
+//
+// キープレビューポップアップ表示処理
+    private void showKeyPreview(KeyboardKey key,boolean isFlick) {
+        if(key==null){
+            return;
+        }
+        boolean shifted=isFlick||isShifted;
+        String label=getKeyLabel(key,shifted);
+        int code=getKeyCode(key,shifted);
+        if(label==null||label.trim().isEmpty()||code<=0){
+            dismissKeyPreview();
+            return;
+        }
+        popupHandler.removeCallbacks(dismissPopupRunnable);
+        if(keyPreviewPopup==null){
+            View popupView=getLayoutInflater().inflate(R.layout.key_popup_view,null);
+            keyPreviewText=(TextView)popupView;
+            keyPreviewPopup=new PopupWindow(popupView,ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,false);
+            keyPreviewPopup.setTouchable(false);
+            keyPreviewPopup.setClippingEnabled(false);
+        }
+        if(keyPreviewText!=null)keyPreviewText.setText(label);
+        int[] location=new int[2];
+        key.getLocationInWindow(location);
+        int keyX=location[0];
+        int keyY=location[1];
+        int keyWidth=key.getWidth();
+        int previewWidth=getResources().getDimensionPixelSize(R.dimen.keypreview_width);
+        int previewHeight=getResources().getDimensionPixelSize(R.dimen.keypreview_height);
+        int popupWidth=Math.max(keyWidth,previewWidth);
+        int popupHeight=previewHeight;
+        int x=keyX+(keyWidth-popupWidth)/2;
+        int y=keyY-popupHeight;
+        if(keyPreviewPopup.isShowing()){
+            keyPreviewPopup.update(x,y,popupWidth,popupHeight);
+        }else if(keyboardView!=null&&keyboardView.getWindowToken()!=null){
+            keyPreviewPopup.setWidth(popupWidth);
+            keyPreviewPopup.setHeight(popupHeight);
+            keyPreviewPopup.showAtLocation(keyboardView,Gravity.NO_GRAVITY,x,y);
+        }
+        popupHandler.postDelayed(dismissPopupRunnable,C.KEY_PREVIEW_TIMEOUT_MS);
+    }
+//
+// キープレビューポップアップ非表示処理
+    private void dismissKeyPreview() {
+        popupHandler.removeCallbacks(dismissPopupRunnable);
+        if(keyPreviewPopup!=null&&keyPreviewPopup.isShowing()){
+            keyPreviewPopup.dismiss();
+        }
     }
 }

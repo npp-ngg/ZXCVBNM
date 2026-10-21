@@ -73,7 +73,6 @@ public class KeyboardKey extends AppCompatButton {
             if((btnCodeJP109S=a.getInt(R.styleable.KeyboardKey_btnCodeJP109S,C.Key.KEY_NULL))==C.Key.KEY_NULL)
                 if(!btnLabelJP109S.isEmpty())btnCodeJP109S=btnLabelJP109S.charAt(0);
             if(btnCodeJ==C.Key.KEY_NULL)btnCodeJ=btnCodeA;
-            if(btnCodeJS==C.Key.KEY_NULL)btnCodeJS=btnCodeAS;
             btnCodeLongTap=a.getInt(R.styleable.KeyboardKey_btnCodeLongTap,C.Key.KEY_NULL);
         }finally{
             a.recycle();
@@ -97,8 +96,8 @@ public class KeyboardKey extends AppCompatButton {
     }
 //
     public String getBtnLabelJS() {
-        if(btnLabelJS==null||btnLabelJS.isEmpty()){
-            return btnLabelAS;
+        if(btnLabelJS==null){
+            return NULL_STRING;
         }
         return btnLabelJS;
     }
@@ -127,9 +126,6 @@ public class KeyboardKey extends AppCompatButton {
     }
 //
     public int getBtnCodeJS() {
-        if(btnCodeJS==C.Key.KEY_NULL){
-            return btnCodeAS;
-        }
         return btnCodeJS;
     }
 //
