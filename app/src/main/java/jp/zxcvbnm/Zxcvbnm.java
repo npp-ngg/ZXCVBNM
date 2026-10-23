@@ -3,6 +3,7 @@ package jp.zxcvbnm;
 import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -31,6 +32,9 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     private float touchDownX=0;
     private float touchDownY=0;
     private boolean isFlickDown=false;
+    private boolean isFlickUp=false;
+    private boolean isFlickLeft=false;
+    private boolean isFlickRight=false;
 //
 // ビュー保持用フィールド
     private View keyboardView;
@@ -46,6 +50,19 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
     };
 //
+// キーリピート保持用フィールド
+    private int repeatCode=C.Key.KEY_NULL;
+    private String repeatLabel=null;
+    private boolean isRepeating=false;
+    private final Runnable keyRepeatRunnable=new Runnable() {
+        @Override public void run() {
+            if(isRepeating){
+                processKeyAction(repeatCode,repeatLabel);
+                popupHandler.postDelayed(this,C.KEY_REPEAT_INTERVAL_MS);
+            }
+        }
+    };
+//
 // サービス作成時の初期化処理
     @Override public void onCreate() {
         super.onCreate();
@@ -56,6 +73,8 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }catch(Throwable e){
             MozcLog.e("Failed to load MozcJNI",e);
         }
+        Log.i(C.TAG,"Version="+getResources().getString(R.string.version_name)+
+                "(BUILD."+getResources().getInteger(R.integer.build_number)+")");
     }
 //
 // キーボードビューの生成処理
@@ -84,6 +103,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // 入力終了時の処理
     @Override public void onFinishInputView(boolean finishingInput) {
         super.onFinishInputView(finishingInput);
+        stopKeyRepeat();
         dismissKeyPreview();
     }
 //
@@ -93,6 +113,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             view.setOnClickListener(this);
             view.setOnLongClickListener(this);
             view.setOnTouchListener(this);
+            view.setLongClickable(true);
         }else if(view instanceof ViewGroup){
             ViewGroup group=(ViewGroup)view;
             int count=group.getChildCount();
@@ -267,6 +288,28 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         processKeyAction(code,label);
     }
 //
+// モード切替キー（あキー）判定処理
+    private boolean isModeSwitchKey(KeyboardKey key) {
+        if(key==null){
+            return false;
+        }
+        if(key.getId()==R.id.btn49){
+            return true;
+        }
+        int code=getKeyCode(key);
+        return code==C.Key.KEY_TO_KANA||code==C.Key.KEY_TO_ALPHA||code==C.Key.KEY_ZENKAKU_HANKAKU;
+    }
+//
+// JP109モード切り替え処理
+    private void toggleJp109Mode() {
+        if(currentMode==MODE_JP109){
+            currentMode=MODE_JAPANESE;
+        }else{
+            currentMode=MODE_JP109;
+        }
+        updateKeyboardKeys();
+    }
+//
 // キーの下フリックイベント処理
     private void onFlickDown(KeyboardKey key) {
         int code=getKeyCode(key,true);
@@ -274,7 +317,106 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         processKeyAction(code,label);
     }
 //
-// キーのタッチイベント処理 (下フリック検出・キープレビュー表示)
+// キーの上フリックイベント処理
+    private void onFlickUp(KeyboardKey key) {
+        int code=getKeyCodeUp(key);
+        String label=getKeyLabelUp(key);
+        processKeyAction(code,label);
+    }
+//
+// キーの左フリックイベント処理
+    private void onFlickLeft(KeyboardKey key) {
+        if(isModeSwitchKey(key)){
+            toggleJp109Mode();
+            return;
+        }
+        int code=getKeyCodeLeft(key);
+        String label=getKeyLabelLeft(key);
+        if(code!=C.Key.KEY_NULL||(label!=null&&!label.isEmpty())){
+            processKeyAction(code,label);
+        }
+    }
+//
+// キーの右フリックイベント処理
+    private void onFlickRight(KeyboardKey key) {
+        if(isModeSwitchKey(key)){
+            toggleJp109Mode();
+            return;
+        }
+        int code=getKeyCodeRight(key);
+        String label=getKeyLabelRight(key);
+        if(code!=C.Key.KEY_NULL||(label!=null&&!label.isEmpty())){
+            processKeyAction(code,label);
+        }
+    }
+//
+// モードに応じた上フリックキーラベル取得処理
+    private String getKeyLabelUp(KeyboardKey key) {
+        String label=null;
+        if(currentMode==MODE_JAPANESE){
+            label=key.getBtnLabelJU();
+        }
+        return label!=null?label:"";
+    }
+//
+// モードに応じた上フリックキーコード取得処理
+    private int getKeyCodeUp(KeyboardKey key) {
+        int code=C.Key.KEY_NULL;
+        if(currentMode==MODE_JAPANESE){
+            code=key.getBtnCodeJU();
+        }
+        return code;
+    }
+//
+// モードに応じた左フリックキーラベル取得処理
+    private String getKeyLabelLeft(KeyboardKey key) {
+        if(isModeSwitchKey(key)){
+            return currentMode==MODE_JP109?"かな":"JP109";
+        }
+        String label=null;
+        if(currentMode==MODE_JAPANESE){
+            label=key.getBtnLabelJL();
+        }
+        return label!=null?label:"";
+    }
+//
+// モードに応じた左フリックキーコード取得処理
+    private int getKeyCodeLeft(KeyboardKey key) {
+        if(isModeSwitchKey(key)){
+            return 1;
+        }
+        int code=C.Key.KEY_NULL;
+        if(currentMode==MODE_JAPANESE){
+            code=key.getBtnCodeJL();
+        }
+        return code;
+    }
+//
+// モードに応じた右フリックキーラベル取得処理
+    private String getKeyLabelRight(KeyboardKey key) {
+        if(isModeSwitchKey(key)){
+            return currentMode==MODE_JP109?"かな":"JP109";
+        }
+        return "";
+    }
+//
+// モードに応じた右フリックキーコード取得処理
+    private int getKeyCodeRight(KeyboardKey key) {
+        if(isModeSwitchKey(key)){
+            return 1;
+        }
+        return C.Key.KEY_NULL;
+    }
+//
+// フリックフラグリセット処理
+    private void resetFlickFlags() {
+        isFlickDown=false;
+        isFlickUp=false;
+        isFlickLeft=false;
+        isFlickRight=false;
+    }
+//
+// キーのタッチイベント処理 (フリック検出・キープレビュー表示)
     @Override public boolean onTouch(View v,MotionEvent event) {
         if(!(v instanceof KeyboardKey)){
             return false;
@@ -285,40 +427,74 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         float flickThreshold=20.0f*density;
         switch(action){
             case MotionEvent.ACTION_DOWN:
-// タッチ開始座標保持およびプレビュー表示
+// タッチ開始座標保持およびリピート停止・プレビュー表示
                 touchDownX=event.getX();
                 touchDownY=event.getY();
-                isFlickDown=false;
-                showKeyPreview(key,false);
+                resetFlickFlags();
+                stopKeyRepeat();
+                showKeyPreview(key,false,false,false,false);
                 return false;
             case MotionEvent.ACTION_MOVE:
-// 下フリック状態判定およびプレビュー更新
+// フリック状態判定およびプレビュー更新
                 float deltaY=event.getY()-touchDownY;
                 float deltaX=event.getX()-touchDownX;
                 boolean newFlickDown=(deltaY>flickThreshold&&deltaY>Math.abs(deltaX));
-                if(newFlickDown!=isFlickDown){
+                boolean newFlickUp=(deltaY<-flickThreshold&&-deltaY>Math.abs(deltaX));
+                boolean newFlickRight=(deltaX>flickThreshold&&deltaX>Math.abs(deltaY));
+                boolean newFlickLeft=(deltaX<-flickThreshold&&-deltaX>Math.abs(deltaY));
+                if(newFlickDown!=isFlickDown||newFlickUp!=isFlickUp||
+                    newFlickLeft!=isFlickLeft||newFlickRight!=isFlickRight){
                     isFlickDown=newFlickDown;
-                    showKeyPreview(key,isFlickDown);
+                    isFlickUp=newFlickUp;
+                    isFlickLeft=newFlickLeft;
+                    isFlickRight=newFlickRight;
+                    if(isFlickDown||isFlickUp||isFlickLeft||isFlickRight){
+                        stopKeyRepeat();
+                    }
+                    showKeyPreview(key,isFlickDown,isFlickUp,isFlickLeft,isFlickRight);
                 }
-                return false;
+                return isFlickDown||isFlickUp||isFlickLeft||isFlickRight;
             case MotionEvent.ACTION_UP:
-// キープレビュー非表示
-//                dismissKeyPreview();
-// 下フリック確定時の入力実行
+// キーリピート停止
+                boolean wasRepeating=isRepeating;
+                stopKeyRepeat();
+// フリック確定時の入力実行
                 float upDeltaY=event.getY()-touchDownY;
                 float upDeltaX=event.getX()-touchDownX;
                 if(isFlickDown||(upDeltaY>flickThreshold&&upDeltaY>Math.abs(upDeltaX))){
-                    isFlickDown=false;
+                    resetFlickFlags();
                     key.setPressed(false);
                     onFlickDown(key);
                     return true;
                 }
-                isFlickDown=false;
+                if(isFlickUp||(upDeltaY<-flickThreshold&&-upDeltaY>Math.abs(upDeltaX))){
+                    resetFlickFlags();
+                    key.setPressed(false);
+                    onFlickUp(key);
+                    return true;
+                }
+                if(isFlickLeft||(upDeltaX<-flickThreshold&&-upDeltaX>Math.abs(upDeltaY))){
+                    resetFlickFlags();
+                    key.setPressed(false);
+                    onFlickLeft(key);
+                    return true;
+                }
+                if(isFlickRight||(upDeltaX>flickThreshold&&upDeltaX>Math.abs(upDeltaY))){
+                    resetFlickFlags();
+                    key.setPressed(false);
+                    onFlickRight(key);
+                    return true;
+                }
+                resetFlickFlags();
+                if(wasRepeating){
+                    return true;
+                }
                 return false;
             case MotionEvent.ACTION_CANCEL:
-// タッチキャンセル処理およびプレビュー非表示
+// タッチキャンセル処理およびリピート停止・プレビュー非表示
+                stopKeyRepeat();
                 dismissKeyPreview();
-                isFlickDown=false;
+                resetFlickFlags();
                 return false;
         }
         return false;
@@ -326,7 +502,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 //
 // キーのロングタップイベント処理
     @Override public boolean onLongClick(View v) {
-        if(isFlickDown){
+        if(isFlickDown||isFlickUp||isFlickLeft||isFlickRight){
             return true;
         }
         if(!(v instanceof KeyboardKey)){
@@ -334,24 +510,63 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
         KeyboardKey key=(KeyboardKey)v;
         int codeLong=key.getBtnCodeLongTap();
-        if(codeLong!=-1){
-            if(codeLong>0){
-                dismissKeyPreview();
-                sendKeyChar((char)codeLong);
-                return true;
-            }
+        int code;
+        String label;
+        if(codeLong!=C.Key.KEY_NULL&&codeLong!=-1){
+            code=codeLong;
+            label=null;
+        }else{
+            code=getKeyCode(key);
+            label=getKeyLabel(key);
+        }
+        if(code!=C.Key.KEY_NULL){
+            dismissKeyPreview();
+            startKeyRepeat(code,label);
+            return true;
         }
         return false;
     }
 //
+// キーリピート開始処理
+    private void startKeyRepeat(int code,String label) {
+        stopKeyRepeat();
+        repeatCode=code;
+        repeatLabel=label;
+        processKeyAction(repeatCode,repeatLabel);
+        if(code!=C.Key.KEY_SHIFT&&code!=C.Key.KEY_TO_ALPHA&&code!=C.Key.KEY_TO_KANA){
+            isRepeating=true;
+            popupHandler.postDelayed(keyRepeatRunnable,C.KEY_REPEAT_INTERVAL_MS);
+        }
+    }
+//
+// キーリピート停止処理
+    private void stopKeyRepeat() {
+        isRepeating=false;
+        popupHandler.removeCallbacks(keyRepeatRunnable);
+    }
+//
 // キープレビューポップアップ表示処理
-    private void showKeyPreview(KeyboardKey key,boolean isFlick) {
+    private void showKeyPreview(KeyboardKey key,boolean isFlickDown,boolean isFlickUp,
+        boolean isFlickLeft,boolean isFlickRight) {
         if(key==null){
             return;
         }
-        boolean shifted=isFlick||isShifted;
-        String label=getKeyLabel(key,shifted);
-        int code=getKeyCode(key,shifted);
+        String label;
+        int code;
+        if(isFlickLeft){
+            label=getKeyLabelLeft(key);
+            code=getKeyCodeLeft(key);
+        }else if(isFlickRight){
+            label=getKeyLabelRight(key);
+            code=getKeyCodeRight(key);
+        }else if(isFlickUp){
+            label=getKeyLabelUp(key);
+            code=getKeyCodeUp(key);
+        }else{
+            boolean shifted=isFlickDown||isShifted;
+            label=getKeyLabel(key,shifted);
+            code=getKeyCode(key,shifted);
+        }
         if(label==null||label.trim().isEmpty()||code<=0){
             dismissKeyPreview();
             return;

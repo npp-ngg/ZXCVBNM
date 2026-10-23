@@ -65,6 +65,7 @@
         app:btnLabelA="2"
         app:btnLabelAS="&quot;"
         app:btnLabelJ="ふ"
+        app:btnLabelJU="ぶ"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn3"
@@ -220,6 +221,7 @@
         app:btnLabelA="-"
         app:btnLabelAS="="
         app:btnLabelJ="ほ"
+        app:btnLabelJU="ぼ"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn12"
@@ -238,6 +240,7 @@
         app:btnLabelA="^"
         app:btnLabelAS="~"
         app:btnLabelJ="へ"
+        app:btnLabelJU="べ"
         app:btnLabelJS="⋯"
         app:btnCodeJS="-160"
         app:btnLabelJP109S="~"
@@ -259,6 +262,7 @@
         app:btnLabelA="q"
         app:btnLabelAS="Q"
         app:btnLabelJ="た"
+        app:btnLabelJU="だ"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn14"
@@ -276,6 +280,7 @@
         app:btnLabelA="w"
         app:btnLabelAS="W"
         app:btnLabelJ="て"
+        app:btnLabelJU="で"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn15"
@@ -310,6 +315,7 @@
         app:btnLabelA="r"
         app:btnLabelAS="R"
         app:btnLabelJ="す"
+        app:btnLabelJU="ず"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn17"
@@ -327,6 +333,7 @@
         app:btnLabelA="t"
         app:btnLabelAS="T"
         app:btnLabelJ="か"
+        app:btnLabelJU="が"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn18"
@@ -415,6 +422,7 @@
         app:btnLabelA="p"
         app:btnLabelAS="P"
         app:btnLabelJ="せ"
+        app:btnLabelJU="ぜ"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn23"
@@ -467,6 +475,7 @@
         app:btnLabelA="a"
         app:btnLabelAS="A"
         app:btnLabelJ="ち"
+        app:btnLabelJU="ぢ"
         app:btnLabelJS="✓"
         app:btnCodeJS="-110"
         app:btnLabelJP109S="A" />
@@ -486,6 +495,7 @@
         app:btnLabelA="s"
         app:btnLabelAS="S"
         app:btnLabelJ="と"
+        app:btnLabelJU="ど"
         app:btnCodeJS="0"/>
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn27"
@@ -503,6 +513,7 @@
         app:btnLabelA="d"
         app:btnLabelAS="D"
         app:btnLabelJ="し"
+        app:btnLabelJU="じ"
         app:btnCodeJS="0"/>
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn28"
@@ -520,6 +531,7 @@
         app:btnLabelA="f"
         app:btnLabelAS="F"
         app:btnLabelJ="は"
+        app:btnLabelJU="ば"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn29"
@@ -537,6 +549,7 @@
         app:btnLabelA="g"
         app:btnLabelAS="G"
         app:btnLabelJ="き"
+        app:btnLabelJU="ぎ"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn30"
@@ -554,6 +567,7 @@
         app:btnLabelA="h"
         app:btnLabelAS="H"
         app:btnLabelJ="く"
+        app:btnLabelJU="ぐ"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn31"
@@ -639,6 +653,7 @@
         app:btnLabelA=":"
         app:btnLabelAS="*"
         app:btnLabelJ="け"
+        app:btnLabelJU="げ"
         app:btnCodeJS="0" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn36"
@@ -674,6 +689,7 @@
         app:btnLabelA="z"
         app:btnLabelAS="Z"
         app:btnLabelJ="つ"
+        app:btnLabelJU="づ"
         app:btnLabelJS="っ" />
     <jp.zxcvbnm.KeyboardKey
         android:id="@+id/btn38"
@@ -691,6 +707,7 @@
         app:btnLabelA="x"
         app:btnLabelAS="X"
         app:btnLabelJ="さ"
+        app:btnLabelJU="ざ"
         app:btnLabelJS="✂"
         app:btnCodeJS="-111"
         app:btnLabelJP109S="X" />
@@ -710,6 +727,7 @@
         app:btnLabelA="c"
         app:btnLabelAS="C"
         app:btnLabelJ="そ"
+        app:btnLabelJU="ぞ"
         app:btnLabelJS="❏"
         app:btnCodeJS="-112"
         app:btnLabelJP109S="C" />
@@ -729,6 +747,7 @@
         app:btnLabelA="v"
         app:btnLabelAS="V"
         app:btnLabelJ="ひ"
+        app:btnLabelJU="び"
         app:btnLabelJS="⎀"
         app:btnCodeJS="-113"
         app:btnLabelJP109S="V" />
@@ -748,6 +767,7 @@
         app:btnLabelA="b"
         app:btnLabelAS="B"
         app:btnLabelJ="こ"
+        app:btnLabelJU="ご"
         app:btnCodeJS="0"
         app:btnLabelJP109S="B" />
     <jp.zxcvbnm.KeyboardKey

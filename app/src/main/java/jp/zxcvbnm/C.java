@@ -5,7 +5,8 @@ import org.mozc.android.inputmethod.japanese.protobuf.ProtoConfig;
 final class C{
     static final String TAG="ZXCVBNM";
     static final String memoFile="memo.dat";
-    static final int KEY_PREVIEW_TIMEOUT_MS=5000;
+    static final int KEY_PREVIEW_TIMEOUT_MS=300;
+    static final int KEY_REPEAT_INTERVAL_MS=80;
     static final class Mozc{
         static final String mozcDataFile="mozc.data";
         static final String mozcChildDir=".mozc";
