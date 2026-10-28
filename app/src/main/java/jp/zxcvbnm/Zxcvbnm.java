@@ -332,7 +332,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
         int code=getKeyCodeLeft(key);
         String label=getKeyLabelLeft(key);
-        if(code!=C.Key.KEY_NULL||(label!=null&&!label.isEmpty())){
+        if(code!=C.Key.KEY_NULL){
             processKeyAction(code,label);
         }
     }
@@ -345,7 +345,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
         int code=getKeyCodeRight(key);
         String label=getKeyLabelRight(key);
-        if(code!=C.Key.KEY_NULL||(label!=null&&!label.isEmpty())){
+        if(code!=C.Key.KEY_NULL){
             processKeyAction(code,label);
         }
     }
