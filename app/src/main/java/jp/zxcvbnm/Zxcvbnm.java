@@ -4,6 +4,9 @@ import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.RelativeSizeSpan;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -135,7 +138,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     private void updateKeysRecursively(View view) {
         if(view instanceof KeyboardKey){
             KeyboardKey key=(KeyboardKey)view;
-            String label=getKeyLabel(key);
+            CharSequence label=getKeyLabel(key);
             if(label!=null){
                 key.setText(label);
             }
@@ -149,8 +152,8 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     }
 //
 // モードおよびシフト状態に応じたキーラベル取得処理
-    private String getKeyLabel(KeyboardKey key,boolean shifted) {
-        String label=null;
+    private CharSequence getKeyLabel(KeyboardKey key,boolean shifted) {
+        CharSequence label=null;
         if(shifted){
             switch(currentMode){
                 case MODE_JAPANESE:
@@ -160,14 +163,14 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                     label=key.getBtnLabelAS();
                     break;
                 case MODE_JP109:
-                    label=key.getBtnLabelJP109S();
+                    label=getJp109KeyLabel(key,true);
                     break;
             }
         }else{
             switch(currentMode){
                 case MODE_JAPANESE:
                     label=key.getBtnLabelJ();
-                    if(label==null||label.isEmpty()){
+                    if(label==null||label.length()==0){
                         label=key.getBtnLabelA();
                     }
                     break;
@@ -175,21 +178,47 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                     label=key.getBtnLabelA();
                     break;
                 case MODE_JP109:
-                    label=key.getBtnLabelJP109();
-                    if(label==null||label.isEmpty()){
-                        label=key.getBtnLabelA();
-                    }
+                    label=getJp109KeyLabel(key,false);
                     break;
             }
-            if(label==null||label.isEmpty()){
+            if(label==null||label.length()==0){
                 label=key.getBtnLabelA();
             }
         }
         return label!=null?label:"";
     }
 //
-    private String getKeyLabel(KeyboardKey key) {
+    private CharSequence getKeyLabel(KeyboardKey key) {
         return getKeyLabel(key,isShifted);
+    }
+//
+// JP109モード用キーラベル生成処理
+    private CharSequence getJp109KeyLabel(KeyboardKey key,boolean shifted) {
+        if(isModeSwitchKey(key)){
+            return shifted?key.getBtnLabelJP109S():key.getBtnLabelJP109();
+        }
+        String top=shifted?key.getBtnLabelAS():key.getBtnLabelA();
+        String bottom=shifted?key.getBtnLabelJS():key.getBtnLabelJ();
+        if(top==null)top="";
+        if(bottom==null||bottom.isEmpty()){
+            bottom=key.getBtnLabelJ();
+        }
+        if(bottom==null)bottom="";
+        if(top.isEmpty()&&bottom.isEmpty()){
+            return "";
+        }
+        if(top.isEmpty()){
+            return bottom;
+        }
+        if(bottom.isEmpty()||top.equals(bottom)){
+            return top;
+        }
+        String text=top+"\n"+bottom;
+        SpannableString ss=new SpannableString(text);
+        int start=top.length()+1;
+        int end=text.length();
+        ss.setSpan(new RelativeSizeSpan(0.7f),start,end,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return ss;
     }
 //
 // モードおよびシフト状態に応じたキーコード取得処理
@@ -223,6 +252,9 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 //
 // キーアクション共通処理
     private void processKeyAction(int code,String label) {
+        if(label!=null&&label.contains("\n")){
+            label=null;
+        }
         switch(code){
             case C.Key.KEY_SHIFT:
 // シフトキー処理
@@ -284,7 +316,8 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
         KeyboardKey key=(KeyboardKey)v;
         int code=getKeyCode(key);
-        String label=getKeyLabel(key);
+        CharSequence labelSeq=getKeyLabel(key);
+        String label=labelSeq!=null?labelSeq.toString():"";
         processKeyAction(code,label);
     }
 //
@@ -313,7 +346,8 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // キーの下フリックイベント処理
     private void onFlickDown(KeyboardKey key) {
         int code=getKeyCode(key,true);
-        String label=getKeyLabel(key,true);
+        CharSequence labelSeq=getKeyLabel(key,true);
+        String label=labelSeq!=null?labelSeq.toString():"";
         processKeyAction(code,label);
     }
 //
@@ -517,7 +551,8 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             label=null;
         }else{
             code=getKeyCode(key);
-            label=getKeyLabel(key);
+            CharSequence labelSeq=getKeyLabel(key);
+            label=labelSeq!=null?labelSeq.toString():"";
         }
         if(code!=C.Key.KEY_NULL){
             dismissKeyPreview();
@@ -551,7 +586,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         if(key==null){
             return;
         }
-        String label;
+        CharSequence label;
         int code;
         if(isFlickLeft){
             label=getKeyLabelLeft(key);
@@ -567,7 +602,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             label=getKeyLabel(key,shifted);
             code=getKeyCode(key,shifted);
         }
-        if(label==null||label.trim().isEmpty()||code<=0){
+        if(label==null||label.toString().trim().isEmpty()||code<=0){
             dismissKeyPreview();
             return;
         }

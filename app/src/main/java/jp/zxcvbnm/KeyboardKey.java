@@ -67,8 +67,8 @@ public class KeyboardKey extends AppCompatButton {
             if((btnLabelJL=a.getString(R.styleable.KeyboardKey_btnLabelJL))==null)btnLabelJL=NULL_STRING;
             if((btnLabelJU=a.getString(R.styleable.KeyboardKey_btnLabelJU))==null)btnLabelJU=NULL_STRING;
             if((btnLabelJD=a.getString(R.styleable.KeyboardKey_btnLabelJD))==null)btnLabelJD=NULL_STRING;
-            if((btnLabelJP109=a.getString(R.styleable.KeyboardKey_btnLabelJP109))==null)btnLabelJP109=NULL_STRING;
-            if((btnLabelJP109S=a.getString(R.styleable.KeyboardKey_btnLabelJP109S))==null)btnLabelJP109S=NULL_STRING;
+            if((btnLabelJP109=a.getString(R.styleable.KeyboardKey_btnLabelJP109))==null)btnLabelJP109=btnLabelA;
+            if((btnLabelJP109S=a.getString(R.styleable.KeyboardKey_btnLabelJP109S))==null)btnLabelJP109S=btnLabelAS;
 //
             if((btnCodeA=a.getInt(R.styleable.KeyboardKey_btnCodeA,C.Key.KEY_NULL))==C.Key.KEY_NULL)
                 if(!btnLabelA.isEmpty())btnCodeA=btnLabelA.charAt(0);
@@ -85,9 +85,9 @@ public class KeyboardKey extends AppCompatButton {
             if((btnCodeJD=a.getInt(R.styleable.KeyboardKey_btnCodeJD,C.Key.KEY_NULL))==C.Key.KEY_NULL)
                 if(!btnLabelJD.isEmpty())btnCodeJD=btnLabelJD.charAt(0);
             if((btnCodeJP109=a.getInt(R.styleable.KeyboardKey_btnCodeJP109,C.Key.KEY_NULL))==C.Key.KEY_NULL)
-                if(!btnLabelJP109.isEmpty())btnCodeJP109=btnLabelJP109.charAt(0);
+                btnCodeJP109=btnCodeA;
             if((btnCodeJP109S=a.getInt(R.styleable.KeyboardKey_btnCodeJP109S,C.Key.KEY_NULL))==C.Key.KEY_NULL)
-                if(!btnLabelJP109S.isEmpty())btnCodeJP109S=btnLabelJP109S.charAt(0);
+                btnCodeJP109S=btnCodeAS;
             if(btnCodeJ==C.Key.KEY_NULL)btnCodeJ=btnCodeA;
             btnCodeLongTap=a.getInt(R.styleable.KeyboardKey_btnCodeLongTap,C.Key.KEY_NULL);
         }finally{
