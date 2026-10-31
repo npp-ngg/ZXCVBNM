@@ -84,6 +84,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     @Override public View onCreateInputView() {
         keyboardView=getLayoutInflater().inflate(R.layout.keyboard,null);
         setupKeyListeners(keyboardView);
+        updateKeyboardLayout();
         updateKeyboardKeys();
         return keyboardView;
     }
@@ -100,7 +101,35 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // 入力開始時の処理
     @Override public void onStartInputView(EditorInfo info,boolean restarting) {
         super.onStartInputView(info,restarting);
+        updateKeyboardLayout();
         updateKeyboardKeys();
+    }
+//
+// 画面設定変更時の処理
+    @Override public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        updateKeyboardLayout();
+        updateKeyboardKeys();
+    }
+//
+// ディスプレイ幅に応じたキーボードレイアウト切り替え処理
+    private void updateKeyboardLayout() {
+        if(keyboardView==null){
+            return;
+        }
+        View phoneView=keyboardView.findViewById(R.id.keyboard_phone);
+        View tabletView=keyboardView.findViewById(R.id.keyboard_tablet);
+        if(phoneView==null||tabletView==null){
+            return;
+        }
+        int displayWidth=getResources().getDisplayMetrics().widthPixels;
+        if(displayWidth>C.Preferences.maxPhoneWidth){
+            phoneView.setVisibility(View.GONE);
+            tabletView.setVisibility(View.VISIBLE);
+        }else{
+            phoneView.setVisibility(View.VISIBLE);
+            tabletView.setVisibility(View.GONE);
+        }
     }
 //
 // 入力終了時の処理

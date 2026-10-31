@@ -52,4 +52,7 @@ final class C{
         static final int KEYBOARD_PHONE=0;
         static final int KEYBOARD_TABLET=1;
     }
+    static class Preferences{
+        static int maxPhoneWidth=720;
+    }
 }
