@@ -7,6 +7,9 @@ final class C{
     static final String memoFile="memo.dat";
     static final int KEY_PREVIEW_TIMEOUT_MS=300;
     static final int KEY_REPEAT_INTERVAL_MS=80;
+    static final class Candidate{
+        static final String SEPARATOR=" ｜ ";
+    }
     static final class Mozc{
         static final String mozcDataFile="mozc.data";
         static final String mozcChildDir=".mozc";

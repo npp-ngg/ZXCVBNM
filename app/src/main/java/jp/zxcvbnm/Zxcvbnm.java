@@ -18,6 +18,8 @@ import android.widget.PopupWindow;
 import android.widget.TextView;
 import com.google.android.apps.inputmethod.libs.mozc.session.MozcJNI;
 import org.mozc.android.inputmethod.japanese.MozcLog;
+import java.util.ArrayList;
+import java.util.List;
 //
 // メイン入力メソッドサービスモジュールクラス
 public class Zxcvbnm extends InputMethodService implements View.OnClickListener,View.OnLongClickListener,View.OnTouchListener {
@@ -42,6 +44,11 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // ビュー保持用フィールド
     private View keyboardView;
     private CandidateTextView candidateTextView;
+//
+// 候補ポップアップ保持用フィールド
+    private PopupWindow candidatePopup;
+    private View candidatePopupView;
+    private final StringBuilder composingText=new StringBuilder();
 //
 // ポップアッププレビュー保持用フィールド
     private PopupWindow keyPreviewPopup;
@@ -91,16 +98,14 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 //
 // 変換候補ビューの生成処理
     @Override public View onCreateCandidatesView() {
-        View candidatesView=getLayoutInflater().inflate(R.layout.candidate_popup_view,null);
-        if(candidatesView!=null){
-            candidateTextView=candidatesView.findViewById(R.id.candidate_text);
-        }
-        return candidatesView;
+        return null;
     }
 //
 // 入力開始時の処理
     @Override public void onStartInputView(EditorInfo info,boolean restarting) {
         super.onStartInputView(info,restarting);
+        composingText.setLength(0);
+        dismissCandidateWindow();
         updateKeyboardLayout();
         updateKeyboardKeys();
     }
@@ -110,6 +115,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         super.onConfigurationChanged(newConfig);
         updateKeyboardLayout();
         updateKeyboardKeys();
+        updateCandidateWindowPosition();
     }
 //
 // ディスプレイ幅に応じたキーボードレイアウト切り替え処理
@@ -130,6 +136,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             phoneView.setVisibility(View.VISIBLE);
             tabletView.setVisibility(View.GONE);
         }
+        updateCandidateWindowPosition();
     }
 //
 // 入力終了時の処理
@@ -137,6 +144,157 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         super.onFinishInputView(finishingInput);
         stopKeyRepeat();
         dismissKeyPreview();
+        composingText.setLength(0);
+        dismissCandidateWindow();
+    }
+//
+// 候補表示用アンカービュー取得処理
+    private View findAnchorView() {
+        if(keyboardView==null){
+            return null;
+        }
+        View phoneView=keyboardView.findViewById(R.id.keyboard_phone);
+        View tabletView=keyboardView.findViewById(R.id.keyboard_tablet);
+        if(phoneView!=null&&phoneView.getVisibility()==View.VISIBLE){
+            View anchor=phoneView.findViewById(R.id.anchor);
+            if(anchor!=null)return anchor;
+        }
+        if(tabletView!=null&&tabletView.getVisibility()==View.VISIBLE){
+            View anchor=tabletView.findViewById(R.id.anchor);
+            if(anchor!=null)return anchor;
+        }
+        return keyboardView.findViewById(R.id.anchor);
+    }
+//
+// 候補ウィンドウ位置更新処理
+    private void updateCandidateWindowPosition() {
+        if(candidatePopup!=null&&candidatePopup.isShowing()&&keyboardView!=null){
+            View anchorView=findAnchorView();
+            if(anchorView==null){
+                anchorView=keyboardView;
+            }
+            int candidateHeight=getResources().getDimensionPixelSize(R.dimen.candidate_height);
+            int popupWidth=keyboardView.getWidth();
+            if(popupWidth<=0){
+                popupWidth=getResources().getDisplayMetrics().widthPixels;
+            }
+            int[] location=new int[2];
+            anchorView.getLocationInWindow(location);
+            int x=location[0];
+            int y=location[1]-candidateHeight;
+            candidatePopup.update(x,y,popupWidth,candidateHeight);
+        }
+    }
+//
+// 候補ウィンドウ表示処理
+    private void showCandidateWindow(List<String> candidates) {
+        if(candidates==null||candidates.isEmpty()){
+            dismissCandidateWindow();
+            return;
+        }
+        if(keyboardView==null||keyboardView.getWindowToken()==null){
+            return;
+        }
+        View anchorView=findAnchorView();
+        if(anchorView==null){
+            anchorView=keyboardView;
+        }
+        int candidateHeight=getResources().getDimensionPixelSize(R.dimen.candidate_height);
+        int popupWidth=keyboardView.getWidth();
+        if(popupWidth<=0){
+            popupWidth=getResources().getDisplayMetrics().widthPixels;
+        }
+        if(candidatePopup==null){
+            candidatePopupView=getLayoutInflater().inflate(R.layout.candidate_popup_view,null);
+            candidateTextView=candidatePopupView.findViewById(R.id.candidate_text);
+            candidatePopup=new PopupWindow(candidatePopupView,popupWidth,candidateHeight,false);
+            candidatePopup.setTouchable(true);
+            candidatePopup.setOutsideTouchable(false);
+            candidatePopup.setClippingEnabled(false);
+        }
+        if(candidateTextView!=null){
+            candidateTextView.setCandidates(candidates,new CandidateTextView.OnCandidateClickListener() {
+                @Override public void onCandidateClick(String candidate) {
+                    commitCandidate(candidate);
+                }
+            });
+        }
+        int[] location=new int[2];
+        anchorView.getLocationInWindow(location);
+        int x=location[0];
+        int y=location[1]-candidateHeight;
+        if(candidatePopup.isShowing()){
+            candidatePopup.update(x,y,popupWidth,candidateHeight);
+        }else{
+            candidatePopup.setWidth(popupWidth);
+            candidatePopup.setHeight(candidateHeight);
+            candidatePopup.showAtLocation(keyboardView,Gravity.NO_GRAVITY,x,y);
+        }
+    }
+//
+// 候補ポップアップ非表示処理
+    private void dismissCandidateWindow() {
+        if(candidatePopup!=null&&candidatePopup.isShowing()){
+            candidatePopup.dismiss();
+        }
+    }
+//
+// 候補選択時の確定処理
+    private void commitCandidate(String candidate) {
+        InputConnection ic=getCurrentInputConnection();
+        if(ic!=null){
+            ic.commitText(candidate,1);
+        }
+        composingText.setLength(0);
+        dismissCandidateWindow();
+    }
+//
+// ひらがなからカタカナへの変換処理
+    private String toKatakana(String input) {
+        if(input==null)return "";
+        StringBuilder sb=new StringBuilder();
+        for(int i=0;i<input.length();i++){
+            char c=input.charAt(i);
+            if(c>='ぁ'&&c<='ん'){
+                sb.append((char)(c+0x60));
+            }else{
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+//
+// 仮の変換候補生成処理
+    private List<String> createDummyCandidates(String text) {
+        List<String> list=new ArrayList<>();
+        if(text==null||text.isEmpty()){
+            return list;
+        }
+        list.add(text);
+        String katakana=toKatakana(text);
+        if(!katakana.equals(text)){
+            list.add(katakana);
+        }
+        if(text.equals("あ")){
+            list.add("愛");list.add("相");list.add("会");list.add("合");
+        }else if(text.equals("い")){
+            list.add("胃");list.add("意");list.add("医");list.add("井");
+        }else if(text.equals("う")){
+            list.add("右");list.add("雨");list.add("宇");list.add("羽");
+        }else if(text.equals("か")){
+            list.add("可");list.add("加");list.add("火");list.add("花");
+        }else if(text.equals("き")){
+            list.add("木");list.add("気");list.add("記");list.add("黄");
+        }else{
+            list.add(text+"ー");
+            list.add(text+"さん");
+            list.add(text+"ちゃん");
+            list.add(text+"様");
+            list.add(text+"（仮）");
+        }
+        list.add(text+"！");
+        list.add(text+"？");
+        return list;
     }
 //
 // キーイベントリスナーの全キーへの設定処理
@@ -292,11 +450,36 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 break;
             case C.Key.KEY_DONE:
 // エンターキー処理
-                sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER);
+                if(composingText.length()>0){
+                    InputConnection ic=getCurrentInputConnection();
+                    if(ic!=null){
+                        ic.finishComposingText();
+                    }
+                    composingText.setLength(0);
+                    dismissCandidateWindow();
+                }else{
+                    sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER);
+                }
                 break;
             case C.Key.KEY_DELETE:
 // バックスペースキー処理
-                sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
+                if(composingText.length()>0){
+                    composingText.deleteCharAt(composingText.length()-1);
+                    InputConnection ic=getCurrentInputConnection();
+                    if(composingText.length()>0){
+                        if(ic!=null){
+                            ic.setComposingText(composingText,1);
+                        }
+                        showCandidateWindow(createDummyCandidates(composingText.toString()));
+                    }else{
+                        if(ic!=null){
+                            ic.setComposingText("",0);
+                        }
+                        dismissCandidateWindow();
+                    }
+                }else{
+                    sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
+                }
                 break;
             case C.Key.KEY_DELETE_FORWARD:
 // 順方向削除処理
@@ -312,23 +495,35 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 break;
             case C.Key.KEY_TO_ALPHA:
 // 英数モード切替処理
+                if(composingText.length()>0){
+                    commitCandidate(composingText.toString());
+                }
                 currentMode=MODE_ALPHABET;
                 updateKeyboardKeys();
                 break;
             case C.Key.KEY_TO_KANA:
 // 日本語モード切替処理
+                if(composingText.length()>0){
+                    commitCandidate(composingText.toString());
+                }
                 currentMode=MODE_JAPANESE;
                 updateKeyboardKeys();
                 break;
             default:
 // 通常文字キー処理
                 if(code>0){
+                    String inputStr;
                     if(label!=null&&!label.isEmpty()){
-                        sendText(label);
+                        inputStr=label;
                     }else{
-                        char c=(char)code;
-                        sendKeyChar(c);
+                        inputStr=String.valueOf((char)code);
                     }
+                    composingText.append(inputStr);
+                    InputConnection ic=getCurrentInputConnection();
+                    if(ic!=null){
+                        ic.setComposingText(composingText,1);
+                    }
+                    showCandidateWindow(createDummyCandidates(composingText.toString()));
                     if(isShifted){
                         isShifted=false;
                         updateKeyboardKeys();

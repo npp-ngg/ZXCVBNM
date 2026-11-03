@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">ZXCVBNM</string>
+    <string name="candidate_close" translatable="false">▼</string>
 </resources>
