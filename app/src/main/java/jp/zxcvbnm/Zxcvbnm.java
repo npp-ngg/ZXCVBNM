@@ -18,8 +18,16 @@ import android.widget.PopupWindow;
 import android.widget.TextView;
 import com.google.android.apps.inputmethod.libs.mozc.session.MozcJNI;
 import org.mozc.android.inputmethod.japanese.MozcLog;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 //
 // メイン入力メソッドサービスモジュールクラス
 public class Zxcvbnm extends InputMethodService implements View.OnClickListener,View.OnLongClickListener,View.OnTouchListener {
@@ -48,7 +56,10 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // 候補ポップアップ保持用フィールド
     private PopupWindow candidatePopup;
     private View candidatePopupView;
-    private final StringBuilder composingText=new StringBuilder();
+//
+// Mozcセッションおよび非同期スレッド保持用フィールド
+    private long mozcSessionId=0;
+    private final ExecutorService mozcExecutor=Executors.newSingleThreadExecutor();
 //
 // ポップアッププレビュー保持用フィールド
     private PopupWindow keyPreviewPopup;
@@ -78,13 +89,175 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         super.onCreate();
 // Mozc JNIライブラリの初期化処理
         try{
-            String userProfileDir=getFilesDir().getAbsolutePath();
-            MozcJNI.load(userProfileDir,null);
+            String dataFilePath=prepareMozcDataFile();
+            File mozcDir=new File(getFilesDir(),C.Mozc.mozcChildDir);
+            String userProfileDir=mozcDir.getAbsolutePath();
+            MozcJNI.load(userProfileDir,dataFilePath);
+            createMozcSession();
         }catch(Throwable e){
             MozcLog.e("Failed to load MozcJNI",e);
         }
         Log.i(C.TAG,"Version="+getResources().getString(R.string.version_name)+
                 "(BUILD."+getResources().getInteger(R.integer.build_number)+")");
+    }
+//
+// Mozc辞書データ配置処理
+    private String prepareMozcDataFile() {
+        File mozcDir=new File(getFilesDir(),C.Mozc.mozcChildDir);
+        if(!mozcDir.exists()){
+            mozcDir.mkdirs();
+        }
+        File dataFile=new File(mozcDir,C.Mozc.mozcDataFile);
+        if(!dataFile.exists()||dataFile.length()==0){
+            InputStream in=null;
+            OutputStream out=null;
+            try{
+                in=getAssets().open(C.Mozc.mozcDataFile);
+                out=new FileOutputStream(dataFile);
+                byte[] buffer=new byte[8192];
+                int read;
+                while((read=in.read(buffer))!=-1){
+                    out.write(buffer,0,read);
+                }
+                out.flush();
+            }catch(Exception e){
+                MozcLog.e("Failed to copy mozc.data from assets",e);
+            }finally{
+                if(in!=null){
+                    try{
+                        in.close();
+                    }catch(Exception e){
+                    }
+                }
+                if(out!=null){
+                    try{
+                        out.close();
+                    }catch(Exception e){
+                    }
+                }
+            }
+        }
+        return dataFile.getAbsolutePath();
+    }
+//
+// サービス破棄時の処理
+    @Override public void onDestroy() {
+        super.onDestroy();
+        if(mozcSessionId!=0){
+            try{
+                ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                    .setId(mozcSessionId)
+                    .setType(ProtoCommands.Input.CommandType.DELETE_SESSION)
+                    .build();
+                ProtoCommands.Command cmd=ProtoCommands.Command.newBuilder()
+                    .setInput(input)
+                    .build();
+                MozcJNI.evalCommand(cmd.toByteArray());
+            }catch(Throwable e){
+                MozcLog.e("Failed to delete Mozc session",e);
+            }
+        }
+        mozcExecutor.shutdown();
+    }
+//
+// Mozcセッション非同期生成処理
+    private void createMozcSession() {
+        mozcExecutor.execute(new Runnable() {
+            @Override public void run() {
+                try{
+                    ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                        .setType(ProtoCommands.Input.CommandType.CREATE_SESSION)
+                        .build();
+                    ProtoCommands.Command cmd=ProtoCommands.Command.newBuilder()
+                        .setInput(input)
+                        .build();
+                    byte[] outBytes=MozcJNI.evalCommand(cmd.toByteArray());
+                    if(outBytes!=null){
+                        ProtoCommands.Command res=ProtoCommands.Command.parseFrom(outBytes);
+                        if(res!=null&&res.hasOutput()&&res.getOutput().hasId()){
+                            mozcSessionId=res.getOutput().getId();
+                        }
+                    }
+                }catch(Throwable e){
+                    MozcLog.e("Failed to create Mozc session",e);
+                }
+            }
+        });
+    }
+//
+// Mozcコマンド非同期評価処理
+    private void sendMozcCommandAsync(final ProtoCommands.Input input) {
+        mozcExecutor.execute(new Runnable() {
+            @Override public void run() {
+                try{
+                    ProtoCommands.Command cmd=ProtoCommands.Command.newBuilder()
+                        .setInput(input)
+                        .build();
+                    byte[] outBytes=MozcJNI.evalCommand(cmd.toByteArray());
+                    if(outBytes!=null){
+                        final ProtoCommands.Command response=ProtoCommands.Command.parseFrom(outBytes);
+                        popupHandler.post(new Runnable() {
+                            @Override public void run() {
+                                handleMozcOutput(response!=null?response.getOutput():null);
+                            }
+                        });
+                    }
+                }catch(Throwable e){
+                    MozcLog.e("Failed to eval Mozc command",e);
+                }
+            }
+        });
+    }
+//
+// Mozcレスポンス出力ハンドリング処理
+    private void handleMozcOutput(ProtoCommands.Output output) {
+        if(output==null){
+            return;
+        }
+        InputConnection ic=getCurrentInputConnection();
+// 確定テキストの反映
+        if(output.hasResult()&&output.getResult().hasValue()){
+            String resultText=output.getResult().getValue();
+            if(ic!=null&&resultText!=null&&!resultText.isEmpty()){
+                ic.commitText(resultText,1);
+            }
+        }
+// 未確定テキスト (preedit) の反映
+        boolean hasPreedit=false;
+        if(output.hasPreedit()&&output.getPreedit().getSegmentCount()>0){
+            StringBuilder sb=new StringBuilder();
+            for(int i=0;i<output.getPreedit().getSegmentCount();i++){
+                sb.append(output.getPreedit().getSegment(i).getValue());
+            }
+            String preeditStr=sb.toString();
+            if(!preeditStr.isEmpty()){
+                hasPreedit=true;
+                if(ic!=null){
+                    ic.setComposingText(preeditStr,1);
+                }
+            }
+        }
+        if(!hasPreedit){
+            if(ic!=null){
+                ic.finishComposingText();
+            }
+        }
+// 変換候補 (candidates) の抽出と画面表示
+        List<String> candidatesList=new ArrayList<>();
+        if(output.hasAllCandidateWords()){
+            ProtoCandidateWindow.CandidateList candidateList=output.getAllCandidateWords();
+            for(int i=0;i<candidateList.getCandidatesCount();i++){
+                ProtoCandidateWindow.CandidateWord candidateWord=candidateList.getCandidates(i);
+                if(candidateWord.hasValue()){
+                    candidatesList.add(candidateWord.getValue());
+                }
+            }
+        }
+        if(!candidatesList.isEmpty()){
+            showCandidateWindow(candidatesList);
+        }else{
+            dismissCandidateWindow();
+        }
     }
 //
 // キーボードビューの生成処理
@@ -104,7 +277,6 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // 入力開始時の処理
     @Override public void onStartInputView(EditorInfo info,boolean restarting) {
         super.onStartInputView(info,restarting);
-        composingText.setLength(0);
         dismissCandidateWindow();
         updateKeyboardLayout();
         updateKeyboardKeys();
@@ -144,7 +316,6 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         super.onFinishInputView(finishingInput);
         stopKeyRepeat();
         dismissKeyPreview();
-        composingText.setLength(0);
         dismissCandidateWindow();
     }
 //
@@ -214,8 +385,8 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
         if(candidateTextView!=null){
             candidateTextView.setCandidates(candidates,new CandidateTextView.OnCandidateClickListener() {
-                @Override public void onCandidateClick(String candidate) {
-                    commitCandidate(candidate);
+                @Override public void onCandidateClick(int index,String candidate) {
+                    commitCandidate(index,candidate);
                 }
             });
         }
@@ -240,61 +411,25 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     }
 //
 // 候補選択時の確定処理
-    private void commitCandidate(String candidate) {
-        InputConnection ic=getCurrentInputConnection();
-        if(ic!=null){
-            ic.commitText(candidate,1);
-        }
-        composingText.setLength(0);
-        dismissCandidateWindow();
-    }
-//
-// ひらがなからカタカナへの変換処理
-    private String toKatakana(String input) {
-        if(input==null)return "";
-        StringBuilder sb=new StringBuilder();
-        for(int i=0;i<input.length();i++){
-            char c=input.charAt(i);
-            if(c>='ぁ'&&c<='ん'){
-                sb.append((char)(c+0x60));
-            }else{
-                sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
-//
-// 仮の変換候補生成処理
-    private List<String> createDummyCandidates(String text) {
-        List<String> list=new ArrayList<>();
-        if(text==null||text.isEmpty()){
-            return list;
-        }
-        list.add(text);
-        String katakana=toKatakana(text);
-        if(!katakana.equals(text)){
-            list.add(katakana);
-        }
-        if(text.equals("あ")){
-            list.add("愛");list.add("相");list.add("会");list.add("合");
-        }else if(text.equals("い")){
-            list.add("胃");list.add("意");list.add("医");list.add("井");
-        }else if(text.equals("う")){
-            list.add("右");list.add("雨");list.add("宇");list.add("羽");
-        }else if(text.equals("か")){
-            list.add("可");list.add("加");list.add("火");list.add("花");
-        }else if(text.equals("き")){
-            list.add("木");list.add("気");list.add("記");list.add("黄");
+    private void commitCandidate(int index,String candidate) {
+        if(mozcSessionId!=0){
+            ProtoCommands.SessionCommand sessionCommand=ProtoCommands.SessionCommand.newBuilder()
+                .setType(ProtoCommands.SessionCommand.CommandType.SELECT_CANDIDATE)
+                .setId(index)
+                .build();
+            ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                .setId(mozcSessionId)
+                .setType(ProtoCommands.Input.CommandType.SEND_COMMAND)
+                .setCommand(sessionCommand)
+                .build();
+            sendMozcCommandAsync(input);
         }else{
-            list.add(text+"ー");
-            list.add(text+"さん");
-            list.add(text+"ちゃん");
-            list.add(text+"様");
-            list.add(text+"（仮）");
+            InputConnection ic=getCurrentInputConnection();
+            if(ic!=null){
+                ic.commitText(candidate,1);
+            }
+            dismissCandidateWindow();
         }
-        list.add(text+"！");
-        list.add(text+"？");
-        return list;
     }
 //
 // キーイベントリスナーの全キーへの設定処理
@@ -450,33 +585,32 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 break;
             case C.Key.KEY_DONE:
 // エンターキー処理
-                if(composingText.length()>0){
-                    InputConnection ic=getCurrentInputConnection();
-                    if(ic!=null){
-                        ic.finishComposingText();
-                    }
-                    composingText.setLength(0);
-                    dismissCandidateWindow();
+                if(mozcSessionId!=0){
+                    ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
+                        .setSpecialKey(ProtoCommands.KeyEvent.SpecialKey.ENTER)
+                        .build();
+                    ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                        .setId(mozcSessionId)
+                        .setType(ProtoCommands.Input.CommandType.SEND_KEY)
+                        .setKey(keyEvent)
+                        .build();
+                    sendMozcCommandAsync(input);
                 }else{
                     sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER);
                 }
                 break;
             case C.Key.KEY_DELETE:
 // バックスペースキー処理
-                if(composingText.length()>0){
-                    composingText.deleteCharAt(composingText.length()-1);
-                    InputConnection ic=getCurrentInputConnection();
-                    if(composingText.length()>0){
-                        if(ic!=null){
-                            ic.setComposingText(composingText,1);
-                        }
-                        showCandidateWindow(createDummyCandidates(composingText.toString()));
-                    }else{
-                        if(ic!=null){
-                            ic.setComposingText("",0);
-                        }
-                        dismissCandidateWindow();
-                    }
+                if(mozcSessionId!=0){
+                    ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
+                        .setSpecialKey(ProtoCommands.KeyEvent.SpecialKey.BACKSPACE)
+                        .build();
+                    ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                        .setId(mozcSessionId)
+                        .setType(ProtoCommands.Input.CommandType.SEND_KEY)
+                        .setKey(keyEvent)
+                        .build();
+                    sendMozcCommandAsync(input);
                 }else{
                     sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
                 }
@@ -495,17 +629,11 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 break;
             case C.Key.KEY_TO_ALPHA:
 // 英数モード切替処理
-                if(composingText.length()>0){
-                    commitCandidate(composingText.toString());
-                }
                 currentMode=MODE_ALPHABET;
                 updateKeyboardKeys();
                 break;
             case C.Key.KEY_TO_KANA:
 // 日本語モード切替処理
-                if(composingText.length()>0){
-                    commitCandidate(composingText.toString());
-                }
                 currentMode=MODE_JAPANESE;
                 updateKeyboardKeys();
                 break;
@@ -518,12 +646,19 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                     }else{
                         inputStr=String.valueOf((char)code);
                     }
-                    composingText.append(inputStr);
-                    InputConnection ic=getCurrentInputConnection();
-                    if(ic!=null){
-                        ic.setComposingText(composingText,1);
+                    if(currentMode==MODE_JAPANESE&&mozcSessionId!=0){
+                        ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
+                            .setKeyString(inputStr)
+                            .build();
+                        ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                            .setId(mozcSessionId)
+                            .setType(ProtoCommands.Input.CommandType.SEND_KEY)
+                            .setKey(keyEvent)
+                            .build();
+                        sendMozcCommandAsync(input);
+                    }else{
+                        sendText(inputStr);
                     }
-                    showCandidateWindow(createDummyCandidates(composingText.toString()));
                     if(isShifted){
                         isShifted=false;
                         updateKeyboardKeys();

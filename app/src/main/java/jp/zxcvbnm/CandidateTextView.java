@@ -20,7 +20,7 @@ public class CandidateTextView extends AppCompatTextView {
 //
 // 候補タップイベント用インターフェース
     public interface OnCandidateClickListener {
-        void onCandidateClick(String candidate);
+        void onCandidateClick(int index,String candidate);
     }
 //
 // フィールド定義
@@ -69,6 +69,7 @@ public class CandidateTextView extends AppCompatTextView {
             if(i>0){
                 ssb.append(C.Candidate.SEPARATOR);
             }
+            final int index=i;
             final String candidate=candidates.get(i);
             int start=ssb.length();
             ssb.append(candidate);
@@ -76,7 +77,7 @@ public class CandidateTextView extends AppCompatTextView {
             ssb.setSpan(new ClickableSpan() {
                 @Override public void onClick(View widget) {
                     if(CandidateTextView.this.listener!=null){
-                        CandidateTextView.this.listener.onCandidateClick(candidate);
+                        CandidateTextView.this.listener.onCandidateClick(index,candidate);
                     }
                 }
                 @Override public void updateDrawState(TextPaint ds) {
