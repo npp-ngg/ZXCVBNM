@@ -386,7 +386,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         if(candidateTextView!=null){
             candidateTextView.setCandidates(candidates,new CandidateTextView.OnCandidateClickListener() {
                 @Override public void onCandidateClick(int index,String candidate) {
-                    commitCandidate(index,candidate);
+                    commitCandidate(candidate);
                 }
             });
         }
@@ -411,25 +411,35 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     }
 //
 // 候補選択時の確定処理
-    private void commitCandidate(int index,String candidate) {
+    private void commitCandidate(String candidate) {
+        InputConnection ic=getCurrentInputConnection();
+        if(ic!=null){
+            ic.commitText(candidate,1);
+        }
         if(mozcSessionId!=0){
-            ProtoCommands.SessionCommand sessionCommand=ProtoCommands.SessionCommand.newBuilder()
-                .setType(ProtoCommands.SessionCommand.CommandType.SELECT_CANDIDATE)
-                .setId(index)
+            final ProtoCommands.SessionCommand sessionCommand=ProtoCommands.SessionCommand
+                .newBuilder()
+                .setType(ProtoCommands.SessionCommand.CommandType.SUBMIT)
                 .build();
-            ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+            final ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
                 .setId(mozcSessionId)
                 .setType(ProtoCommands.Input.CommandType.SEND_COMMAND)
                 .setCommand(sessionCommand)
                 .build();
-            sendMozcCommandAsync(input);
-        }else{
-            InputConnection ic=getCurrentInputConnection();
-            if(ic!=null){
-                ic.commitText(candidate,1);
-            }
-            dismissCandidateWindow();
+            mozcExecutor.execute(new Runnable() {
+                @Override public void run() {
+                    try{
+                        ProtoCommands.Command cmd=ProtoCommands.Command.newBuilder()
+                            .setInput(input)
+                            .build();
+                        MozcJNI.evalCommand(cmd.toByteArray());
+                    }catch(Throwable e){
+                        MozcLog.e("Failed to submit Mozc session",e);
+                    }
+                }
+            });
         }
+        dismissCandidateWindow();
     }
 //
 // キーイベントリスナーの全キーへの設定処理
