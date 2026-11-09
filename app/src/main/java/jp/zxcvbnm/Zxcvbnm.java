@@ -239,8 +239,13 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
         if(!hasPreedit){
             if(ic!=null){
+                ic.setComposingText("",0);
                 ic.finishComposingText();
             }
+        }
+// Mozcでキーが消費されなかった場合のキーイベントフォールバック処理
+        if(output.hasConsumed()&&!output.getConsumed()){
+            sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
         }
 // 変換候補 (candidates) の抽出と画面表示
         List<String> candidatesList=new ArrayList<>();
