@@ -655,12 +655,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             default:
 // 通常文字キー処理
                 if(code>0){
-                    String inputStr;
-                    if(label!=null&&!label.isEmpty()){
-                        inputStr=label;
-                    }else{
-                        inputStr=String.valueOf((char)code);
-                    }
+                    String inputStr=String.valueOf((char)code);
                     if(currentMode==MODE_JAPANESE&&mozcSessionId!=0){
                         ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
                             .setKeyString(inputStr)
