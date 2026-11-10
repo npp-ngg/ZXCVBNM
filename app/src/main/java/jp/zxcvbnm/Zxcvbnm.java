@@ -60,6 +60,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // Mozcセッションおよび非同期スレッド保持用フィールド
     private long mozcSessionId=0;
     private final ExecutorService mozcExecutor=Executors.newSingleThreadExecutor();
+    private boolean isComposing=false;
 //
 // ポップアッププレビュー保持用フィールド
     private PopupWindow keyPreviewPopup;
@@ -225,27 +226,35 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // 未確定テキスト (preedit) の反映
         boolean hasPreedit=false;
         if(output.hasPreedit()&&output.getPreedit().getSegmentCount()>0){
+            ProtoCommands.Preedit preedit=output.getPreedit();
             StringBuilder sb=new StringBuilder();
-            for(int i=0;i<output.getPreedit().getSegmentCount();i++){
-                sb.append(output.getPreedit().getSegment(i).getValue());
+            for(int i=0;i<preedit.getSegmentCount();i++){
+                sb.append(preedit.getSegment(i).getValue());
             }
             String preeditStr=sb.toString();
             if(!preeditStr.isEmpty()){
                 hasPreedit=true;
                 if(ic!=null){
                     ic.setComposingText(preeditStr,1);
+                    if(preedit.hasCursor()){
+                        int cursorInPreedit=preedit.getCursor();
+                        CharSequence beforeText=ic.getTextBeforeCursor(1000,0);
+                        if(beforeText!=null){
+                            int endPos=beforeText.length();
+                            int startPos=Math.max(0,endPos-preeditStr.length());
+                            int targetPos=startPos+cursorInPreedit;
+                            ic.setSelection(targetPos,targetPos);
+                        }
+                    }
                 }
             }
         }
+        isComposing=hasPreedit;
         if(!hasPreedit){
             if(ic!=null){
                 ic.setComposingText("",0);
                 ic.finishComposingText();
             }
-        }
-// Mozcでキーが消費されなかった場合のキーイベントフォールバック処理
-        if(output.hasConsumed()&&!output.getConsumed()){
-            sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
         }
 // 変換候補 (candidates) の抽出と画面表示
         List<String> candidatesList=new ArrayList<>();
@@ -262,6 +271,24 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             showCandidateWindow(candidatesList);
         }else{
             dismissCandidateWindow();
+        }
+    }
+//
+// 特殊キーまたは標準キーイベント送信処理
+    private void processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey specialKey,
+        int androidKeyCode) {
+        if(isComposing&&mozcSessionId!=0){
+            ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
+                .setSpecialKey(specialKey)
+                .build();
+            ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                .setId(mozcSessionId)
+                .setType(ProtoCommands.Input.CommandType.SEND_KEY)
+                .setKey(keyEvent)
+                .build();
+            sendMozcCommandAsync(input);
+        }else{
+            sendDownUpKeyEvents(androidKeyCode);
         }
     }
 //
@@ -282,6 +309,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // 入力開始時の処理
     @Override public void onStartInputView(EditorInfo info,boolean restarting) {
         super.onStartInputView(info,restarting);
+        isComposing=false;
         dismissCandidateWindow();
         updateKeyboardLayout();
         updateKeyboardKeys();
@@ -321,6 +349,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         super.onFinishInputView(finishingInput);
         stopKeyRepeat();
         dismissKeyPreview();
+        isComposing=false;
         dismissCandidateWindow();
     }
 //
@@ -444,6 +473,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 }
             });
         }
+        isComposing=false;
         dismissCandidateWindow();
     }
 //
@@ -616,31 +646,33 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 break;
             case C.Key.KEY_DELETE:
 // バックスペースキー処理
-                if(mozcSessionId!=0){
-                    ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
-                        .setSpecialKey(ProtoCommands.KeyEvent.SpecialKey.BACKSPACE)
-                        .build();
-                    ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
-                        .setId(mozcSessionId)
-                        .setType(ProtoCommands.Input.CommandType.SEND_KEY)
-                        .setKey(keyEvent)
-                        .build();
-                    sendMozcCommandAsync(input);
-                }else{
-                    sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
-                }
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.BACKSPACE,
+                    KeyEvent.KEYCODE_DEL);
                 break;
             case C.Key.KEY_DELETE_FORWARD:
 // 順方向削除処理
-                sendDownUpKeyEvents(KeyEvent.KEYCODE_FORWARD_DEL);
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.DEL,
+                    KeyEvent.KEYCODE_FORWARD_DEL);
                 break;
             case C.Key.KEY_RIGHT_ARROW:
 // 右カーソルキー処理
-                sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_RIGHT);
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.RIGHT,
+                    KeyEvent.KEYCODE_DPAD_RIGHT);
                 break;
             case C.Key.KEY_LEFT_ARROW:
 // 左カーソルキー処理
-                sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT);
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.LEFT,
+                    KeyEvent.KEYCODE_DPAD_LEFT);
+                break;
+            case C.Key.KEY_UP_ARROW:
+// 上カーソルキー処理
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.UP,
+                    KeyEvent.KEYCODE_DPAD_UP);
+                break;
+            case C.Key.KEY_DOWN_ARROW:
+// 下カーソルキー処理
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.DOWN,
+                    KeyEvent.KEYCODE_DPAD_DOWN);
                 break;
             case C.Key.KEY_TO_ALPHA:
 // 英数モード切替処理
