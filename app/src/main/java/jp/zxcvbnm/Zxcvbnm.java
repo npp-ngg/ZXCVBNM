@@ -674,6 +674,12 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.DOWN,
                     KeyEvent.KEYCODE_DPAD_DOWN);
                 break;
+            case ' ':
+            case C.Key.KEY_HENKAN:
+// スペースキー処理
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.SPACE,
+                    KeyEvent.KEYCODE_SPACE);
+                break;
             case C.Key.KEY_TO_ALPHA:
 // 英数モード切替処理
                 currentMode=MODE_ALPHABET;
