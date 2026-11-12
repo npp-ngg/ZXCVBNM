@@ -1,5 +1,6 @@
 package jp.zxcvbnm;
 //
+import android.app.Dialog;
 import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.Looper;
@@ -12,8 +13,11 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.widget.FrameLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import com.google.android.apps.inputmethod.libs.mozc.session.MozcJNI;
@@ -48,6 +52,13 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     private boolean isFlickUp=false;
     private boolean isFlickLeft=false;
     private boolean isFlickRight=false;
+//
+// フローティング・ドラッグ移動保持用フィールド
+    private boolean isFloating=false;
+    private float dragDownRawX=0;
+    private float dragDownRawY=0;
+    private int dragInitialWindowX=0;
+    private int dragInitialWindowY=0;
 //
 // ビュー保持用フィールド
     private View keyboardView;
@@ -295,10 +306,29 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // キーボードビューの生成処理
     @Override public View onCreateInputView() {
         keyboardView=getLayoutInflater().inflate(R.layout.keyboard,null);
+        resetFloatingState();
         setupKeyListeners(keyboardView);
         updateKeyboardLayout();
         updateKeyboardKeys();
         return keyboardView;
+    }
+//
+// フローティング状態の初期化処理 (固定位置へ戻す)
+    private void resetFloatingState() {
+        isFloating=false;
+        Dialog dialog=getWindow();
+        if(dialog!=null&&dialog.getWindow()!=null){
+            Window window=dialog.getWindow();
+            WindowManager.LayoutParams lp=window.getAttributes();
+            if(lp!=null){
+                lp.gravity=Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL;
+                lp.width=ViewGroup.LayoutParams.MATCH_PARENT;
+                lp.height=ViewGroup.LayoutParams.WRAP_CONTENT;
+                lp.x=0;
+                lp.y=0;
+                window.setAttributes(lp);
+            }
+        }
     }
 //
 // 変換候補ビューの生成処理
@@ -337,6 +367,17 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         if(displayWidth>C.Preferences.maxPhoneWidth){
             phoneView.setVisibility(View.GONE);
             tabletView.setVisibility(View.VISIBLE);
+            int tabletWidth=Math.min(displayWidth,C.Preferences.maxKeyboardWidth);
+            ViewGroup.LayoutParams lp=tabletView.getLayoutParams();
+            if(lp instanceof FrameLayout.LayoutParams){
+                FrameLayout.LayoutParams flp=(FrameLayout.LayoutParams)lp;
+                flp.width=tabletWidth;
+                flp.gravity=Gravity.CENTER_HORIZONTAL;
+                tabletView.setLayoutParams(flp);
+            }else if(lp!=null){
+                lp.width=tabletWidth;
+                tabletView.setLayoutParams(lp);
+            }
         }else{
             phoneView.setVisibility(View.VISIBLE);
             tabletView.setVisibility(View.GONE);
@@ -484,6 +525,8 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             view.setOnLongClickListener(this);
             view.setOnTouchListener(this);
             view.setLongClickable(true);
+        }else if(view.getId()==R.id.gap_left||view.getId()==R.id.gap_right){
+            view.setOnTouchListener(this);
         }else if(view instanceof ViewGroup){
             ViewGroup group=(ViewGroup)view;
             int count=group.getChildCount();
@@ -857,8 +900,56 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         isFlickRight=false;
     }
 //
-// キーのタッチイベント処理 (フリック検出・キープレビュー表示)
+// キーのタッチイベント処理 (フリック検出・キープレビュー表示・ドラッグ移動)
     @Override public boolean onTouch(View v,MotionEvent event) {
+        if(v.getId()==R.id.gap_left||v.getId()==R.id.gap_right){
+            Dialog dialog=getWindow();
+            if(dialog==null||dialog.getWindow()==null){
+                return false;
+            }
+            Window window=dialog.getWindow();
+            switch(event.getAction()){
+                case MotionEvent.ACTION_DOWN:
+                    dragDownRawX=event.getRawX();
+                    dragDownRawY=event.getRawY();
+                    int[] loc=new int[2];
+                    if(keyboardView!=null){
+                        keyboardView.getLocationOnScreen(loc);
+                        dragInitialWindowX=loc[0];
+                        dragInitialWindowY=loc[1];
+                    }else{
+                        WindowManager.LayoutParams downLp=window.getAttributes();
+                        if(downLp!=null){
+                            dragInitialWindowX=downLp.x;
+                            dragInitialWindowY=downLp.y;
+                        }
+                    }
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    float dX=event.getRawX()-dragDownRawX;
+                    float dY=event.getRawY()-dragDownRawY;
+                    if(Math.hypot(dX,dY)>10.0f){
+                        isFloating=true;
+                    }
+                    if(isFloating){
+                        WindowManager.LayoutParams moveLp=window.getAttributes();
+                        if(moveLp!=null){
+                            moveLp.gravity=Gravity.LEFT|Gravity.TOP;
+                            moveLp.width=ViewGroup.LayoutParams.WRAP_CONTENT;
+                            moveLp.height=ViewGroup.LayoutParams.WRAP_CONTENT;
+                            moveLp.x=(int)(dragInitialWindowX+dX);
+                            moveLp.y=(int)(dragInitialWindowY+dY);
+                            window.setAttributes(moveLp);
+                            updateCandidateWindowPosition();
+                        }
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    return true;
+            }
+            return false;
+        }
         if(!(v instanceof KeyboardKey)){
             return false;
         }
