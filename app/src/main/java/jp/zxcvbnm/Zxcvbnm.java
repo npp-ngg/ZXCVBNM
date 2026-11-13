@@ -385,6 +385,57 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         updateCandidateWindowPosition();
     }
 //
+// 現在表示中のアクティブなキーボードレイアウトビュー取得処理
+    private View findActiveKeyboardView() {
+        if(keyboardView==null){
+            return null;
+        }
+        int displayWidth=getResources().getDisplayMetrics().widthPixels;
+        if(displayWidth>C.Preferences.maxPhoneWidth){
+            View tabletView=keyboardView.findViewById(R.id.keyboard_tablet);
+            if(tabletView!=null&&tabletView.getVisibility()==View.VISIBLE){
+                return tabletView;
+            }
+        }
+        View phoneView=keyboardView.findViewById(R.id.keyboard_phone);
+        if(phoneView!=null&&phoneView.getVisibility()==View.VISIBLE){
+            return phoneView;
+        }
+        return keyboardView;
+    }
+//
+// タッチ・インセット領域算出処理 (非タッチ領域透過・フローティング時対応)
+    @Override public void onComputeInsets(InputMethodService.Insets outInsets) {
+        super.onComputeInsets(outInsets);
+        View targetView=findActiveKeyboardView();
+        if(targetView==null){
+            return;
+        }
+        int[] loc=new int[2];
+        targetView.getLocationOnScreen(loc);
+        int left=loc[0];
+        int top=loc[1];
+        int right=left+targetView.getWidth();
+//        int bottom=top+targetView.getHeight();
+        int bottom=targetView.getHeight();
+//
+        outInsets.touchableInsets=InputMethodService.Insets.TOUCHABLE_INSETS_REGION;
+//        outInsets.touchableRegion.set(left,top,right,bottom);
+        outInsets.touchableRegion.set(0,0,right,bottom);
+//
+        if(candidatePopup!=null&&candidatePopup.isShowing()&&candidatePopupView!=null){
+            int[] candLoc=new int[2];
+            candidatePopupView.getLocationOnScreen(candLoc);
+            int candLeft=candLoc[0];
+            int candTop=candLoc[1];
+            int candRight=candLeft+candidatePopupView.getWidth();
+            int candBottom=candTop+candidatePopupView.getHeight();
+            outInsets.touchableRegion.union(new android.graphics.Rect(candLeft,candTop,candRight,candBottom));
+        }
+        outInsets.contentTopInsets=top;
+        outInsets.visibleTopInsets=top;
+    }
+//
 // 入力終了時の処理
     @Override public void onFinishInputView(boolean finishingInput) {
         super.onFinishInputView(finishingInput);
@@ -935,6 +986,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                         WindowManager.LayoutParams moveLp=window.getAttributes();
                         if(moveLp!=null){
                             moveLp.gravity=Gravity.LEFT|Gravity.TOP;
+                            moveLp.flags|=WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
                             moveLp.width=ViewGroup.LayoutParams.WRAP_CONTENT;
                             moveLp.height=ViewGroup.LayoutParams.WRAP_CONTENT;
                             moveLp.x=(int)(dragInitialWindowX+dX);
