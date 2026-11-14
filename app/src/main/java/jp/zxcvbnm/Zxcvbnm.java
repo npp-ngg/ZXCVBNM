@@ -786,19 +786,8 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 break;
             case C.Key.KEY_DONE:
 // エンターキー処理
-                if(mozcSessionId!=0){
-                    ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
-                        .setSpecialKey(ProtoCommands.KeyEvent.SpecialKey.ENTER)
-                        .build();
-                    ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
-                        .setId(mozcSessionId)
-                        .setType(ProtoCommands.Input.CommandType.SEND_KEY)
-                        .setKey(keyEvent)
-                        .build();
-                    sendMozcCommandAsync(input);
-                }else{
-                    sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER);
-                }
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.ENTER,
+                    KeyEvent.KEYCODE_ENTER);
                 break;
             case C.Key.KEY_DELETE:
 // バックスペースキー処理
