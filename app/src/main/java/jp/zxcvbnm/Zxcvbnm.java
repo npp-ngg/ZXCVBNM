@@ -316,18 +316,57 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // フローティング状態の初期化処理 (固定位置へ戻す)
     private void resetFloatingState() {
         isFloating=false;
+        if(keyboardView!=null){
+            keyboardView.animate().cancel();
+            keyboardView.setAlpha(1.0f);
+        }
+        if(candidatePopupView!=null){
+            candidatePopupView.animate().cancel();
+            candidatePopupView.setAlpha(1.0f);
+        }
         Dialog dialog=getWindow();
         if(dialog!=null&&dialog.getWindow()!=null){
             Window window=dialog.getWindow();
             WindowManager.LayoutParams lp=window.getAttributes();
             if(lp!=null){
+                int displayWidth=getResources().getDisplayMetrics().widthPixels;
+                int targetWidth=(displayWidth>C.Preferences.maxPhoneWidth)?
+                    Math.min(displayWidth,C.Preferences.maxKeyboardWidth):displayWidth;
                 lp.gravity=Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL;
-                lp.width=ViewGroup.LayoutParams.MATCH_PARENT;
+                lp.width=targetWidth;
                 lp.height=ViewGroup.LayoutParams.WRAP_CONTENT;
                 lp.x=0;
                 lp.y=0;
                 window.setAttributes(lp);
             }
+        }
+    }
+//
+// ドラッグ移動開始時の透明化処理 (70%透明 = alpha 0.3f)
+    private void setDraggingAlpha() {
+        if(keyboardView!=null){
+            keyboardView.animate().cancel();
+            keyboardView.setAlpha(0.3f);
+        }
+        if(candidatePopup!=null&&candidatePopup.isShowing()&&candidatePopupView!=null){
+            candidatePopupView.animate().cancel();
+            candidatePopupView.setAlpha(0.3f);
+        }
+    }
+//
+// ドラッグ移動終了時の透明度復元処理 (0.2秒で1.0fにアニメーション)
+    private void restoreAlphaWithAnimation() {
+        if(keyboardView!=null){
+            keyboardView.animate()
+                .alpha(1.0f)
+                .setDuration(200)
+                .start();
+        }
+        if(candidatePopup!=null&&candidatePopup.isShowing()&&candidatePopupView!=null){
+            candidatePopupView.animate()
+                .alpha(1.0f)
+                .setDuration(200)
+                .start();
         }
     }
 //
@@ -364,23 +403,34 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             return;
         }
         int displayWidth=getResources().getDisplayMetrics().widthPixels;
+        int targetWidth;
         if(displayWidth>C.Preferences.maxPhoneWidth){
             phoneView.setVisibility(View.GONE);
             tabletView.setVisibility(View.VISIBLE);
-            int tabletWidth=Math.min(displayWidth,C.Preferences.maxKeyboardWidth);
+            targetWidth=Math.min(displayWidth,C.Preferences.maxKeyboardWidth);
             ViewGroup.LayoutParams lp=tabletView.getLayoutParams();
-            if(lp instanceof FrameLayout.LayoutParams){
-                FrameLayout.LayoutParams flp=(FrameLayout.LayoutParams)lp;
-                flp.width=tabletWidth;
-                flp.gravity=Gravity.CENTER_HORIZONTAL;
-                tabletView.setLayoutParams(flp);
-            }else if(lp!=null){
-                lp.width=tabletWidth;
+            if(lp!=null){
+                lp.width=targetWidth;
                 tabletView.setLayoutParams(lp);
             }
         }else{
             phoneView.setVisibility(View.VISIBLE);
             tabletView.setVisibility(View.GONE);
+            targetWidth=displayWidth;
+            ViewGroup.LayoutParams lp=phoneView.getLayoutParams();
+            if(lp!=null){
+                lp.width=targetWidth;
+                phoneView.setLayoutParams(lp);
+            }
+        }
+        Dialog dialog=getWindow();
+        if(dialog!=null&&dialog.getWindow()!=null){
+            Window window=dialog.getWindow();
+            WindowManager.LayoutParams wlp=window.getAttributes();
+            if(wlp!=null){
+                wlp.width=targetWidth;
+                window.setAttributes(wlp);
+            }
         }
         updateCandidateWindowPosition();
     }
@@ -413,15 +463,12 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
         int[] loc=new int[2];
         targetView.getLocationOnScreen(loc);
-        int left=loc[0];
         int top=loc[1];
-        int right=left+targetView.getWidth();
-//        int bottom=top+targetView.getHeight();
-        int bottom=targetView.getHeight();
+        int width=targetView.getWidth();
+        int height=targetView.getHeight();
 //
         outInsets.touchableInsets=InputMethodService.Insets.TOUCHABLE_INSETS_REGION;
-//        outInsets.touchableRegion.set(left,top,right,bottom);
-        outInsets.touchableRegion.set(0,0,right,bottom);
+        outInsets.touchableRegion.set(0,0,width,height);
 //
         if(candidatePopup!=null&&candidatePopup.isShowing()&&candidatePopupView!=null){
             int[] candLoc=new int[2];
@@ -431,9 +478,24 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             int candRight=candLeft+candidatePopupView.getWidth();
             int candBottom=candTop+candidatePopupView.getHeight();
             outInsets.touchableRegion.union(new android.graphics.Rect(candLeft,candTop,candRight,candBottom));
+            if(candTop<top){
+                top=candTop;
+            }
         }
-        outInsets.contentTopInsets=top;
-        outInsets.visibleTopInsets=top;
+//
+        if(isFloating){
+            int displayHeight=getResources().getDisplayMetrics().heightPixels;
+            outInsets.contentTopInsets=displayHeight;
+            outInsets.visibleTopInsets=displayHeight;
+        }else{
+            int[] winLoc=new int[2];
+            if(keyboardView!=null){
+                keyboardView.getLocationOnScreen(winLoc);
+                int topOffset=top-winLoc[1];
+                outInsets.contentTopInsets=Math.max(0,topOffset);
+                outInsets.visibleTopInsets=Math.max(0,topOffset);
+            }
+        }
     }
 //
 // 入力終了時の処理
@@ -980,14 +1042,20 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                     float dX=event.getRawX()-dragDownRawX;
                     float dY=event.getRawY()-dragDownRawY;
                     if(Math.hypot(dX,dY)>10.0f){
-                        isFloating=true;
+                        if(!isFloating){
+                            isFloating=true;
+                        }
+                        setDraggingAlpha();
                     }
                     if(isFloating){
                         WindowManager.LayoutParams moveLp=window.getAttributes();
                         if(moveLp!=null){
+                            int displayWidth=getResources().getDisplayMetrics().widthPixels;
+                            int targetWidth=(displayWidth>C.Preferences.maxPhoneWidth)?
+                                Math.min(displayWidth,C.Preferences.maxKeyboardWidth):displayWidth;
                             moveLp.gravity=Gravity.LEFT|Gravity.TOP;
                             moveLp.flags|=WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-                            moveLp.width=ViewGroup.LayoutParams.WRAP_CONTENT;
+                            moveLp.width=targetWidth;
                             moveLp.height=ViewGroup.LayoutParams.WRAP_CONTENT;
                             moveLp.x=(int)(dragInitialWindowX+dX);
                             moveLp.y=(int)(dragInitialWindowY+dY);
@@ -998,6 +1066,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                     return true;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
+                    restoreAlphaWithAnimation();
                     return true;
             }
             return false;
