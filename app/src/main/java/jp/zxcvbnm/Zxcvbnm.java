@@ -269,8 +269,12 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
 // 変換候補 (candidates) の抽出と画面表示
         List<String> candidatesList=new ArrayList<>();
+        int focusedIndex=-1;
         if(output.hasAllCandidateWords()){
             ProtoCandidateWindow.CandidateList candidateList=output.getAllCandidateWords();
+            if(candidateList.hasFocusedIndex()){
+                focusedIndex=candidateList.getFocusedIndex();
+            }
             for(int i=0;i<candidateList.getCandidatesCount();i++){
                 ProtoCandidateWindow.CandidateWord candidateWord=candidateList.getCandidates(i);
                 if(candidateWord.hasValue()){
@@ -278,8 +282,32 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 }
             }
         }
+        if(focusedIndex<0&&!candidatesList.isEmpty()&&output.hasPreedit()){
+            ProtoCommands.Preedit preedit=output.getPreedit();
+            if(preedit.getSegmentCount()>0){
+                String focusedSegText=null;
+                for(int i=0;i<preedit.getSegmentCount();i++){
+                    ProtoCommands.Preedit.Segment seg=preedit.getSegment(i);
+                    if(seg.hasValue()){
+                        focusedSegText=seg.getValue();
+                        break;
+                    }
+                }
+                if(focusedSegText!=null){
+                    for(int i=0;i<candidatesList.size();i++){
+                        if(candidatesList.get(i).equals(focusedSegText)){
+                            focusedIndex=i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if(focusedIndex<0){
+            focusedIndex=0;
+        }
         if(!candidatesList.isEmpty()){
-            showCandidateWindow(candidatesList);
+            showCandidateWindow(candidatesList,focusedIndex);
         }else{
             dismissCandidateWindow();
         }
@@ -562,7 +590,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     }
 //
 // 候補ウィンドウ表示処理
-    private void showCandidateWindow(List<String> candidates) {
+    private void showCandidateWindow(List<String> candidates,final int focusedIndex) {
         if(candidates==null||candidates.isEmpty()){
             dismissCandidateWindow();
             return;
@@ -588,11 +616,12 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             candidatePopup.setClippingEnabled(false);
         }
         if(candidateTextView!=null){
-            candidateTextView.setCandidates(candidates,new CandidateTextView.OnCandidateClickListener() {
-                @Override public void onCandidateClick(int index,String candidate) {
-                    commitCandidate(candidate);
-                }
-            });
+            candidateTextView.setCandidates(candidates,focusedIndex,
+                new CandidateTextView.OnCandidateClickListener() {
+                    @Override public void onCandidateClick(int index,String candidate) {
+                        commitCandidate(candidate);
+                    }
+                });
         }
         int[] location=new int[2];
         anchorView.getLocationInWindow(location);

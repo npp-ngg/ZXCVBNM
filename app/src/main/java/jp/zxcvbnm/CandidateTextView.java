@@ -57,14 +57,16 @@ public class CandidateTextView extends AppCompatTextView {
     }
 //
 // 候補リスト設定処理
-    public void setCandidates(List<String> candidates,OnCandidateClickListener listener) {
+    public void setCandidates(List<String> candidates,final int focusedIndex,
+        OnCandidateClickListener listener) {
         this.listener=listener;
-        scrollTo(0,0);
         if(candidates==null||candidates.isEmpty()){
             setText("");
+            scrollTo(0,0);
             return;
         }
         SpannableStringBuilder ssb=new SpannableStringBuilder();
+        int focusedStart=-1;
         for(int i=0;i<candidates.size();i++){
             if(i>0){
                 ssb.append(C.Candidate.SEPARATOR);
@@ -74,6 +76,10 @@ public class CandidateTextView extends AppCompatTextView {
             int start=ssb.length();
             ssb.append(candidate);
             int end=ssb.length();
+            final boolean isFocused=(i==focusedIndex);
+            if(isFocused){
+                focusedStart=start;
+            }
             ssb.setSpan(new ClickableSpan() {
                 @Override public void onClick(View widget) {
                     if(CandidateTextView.this.listener!=null){
@@ -81,12 +87,33 @@ public class CandidateTextView extends AppCompatTextView {
                     }
                 }
                 @Override public void updateDrawState(TextPaint ds) {
-                    ds.setUnderlineText(false);
+                    ds.setUnderlineText(isFocused);
                     ds.setColor(getCurrentTextColor());
                 }
             },start,end,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         setText(ssb,BufferType.SPANNABLE);
+        final int targetStart=focusedStart;
+        post(new Runnable() {
+            @Override public void run() {
+                if(targetStart>=0){
+                    Layout layout=getLayout();
+                    if(layout!=null){
+                        float left=layout.getPrimaryHorizontal(targetStart);
+                        int targetScrollX=(int)left;
+                        int maxScroll=getMaxScrollX();
+                        if(targetScrollX<0){
+                            targetScrollX=0;
+                        }else if(targetScrollX>maxScroll){
+                            targetScrollX=maxScroll;
+                        }
+                        scrollTo(targetScrollX,0);
+                        return;
+                    }
+                }
+                scrollTo(0,0);
+            }
+        });
     }
 //
 // 最大スクロール量取得処理
