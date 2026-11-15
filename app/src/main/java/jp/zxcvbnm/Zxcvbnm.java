@@ -835,6 +835,46 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 currentMode=MODE_JAPANESE;
                 updateKeyboardKeys();
                 break;
+            case C.Key.KEY_CTL_A:
+// コンテキストメニュー全選択処理
+                {
+                    InputConnection ic=getCurrentInputConnection();
+                    if(ic!=null){
+                        ic.performContextMenuAction(android.R.id.selectAll);
+                    }
+                }
+                break;
+            case C.Key.KEY_CTL_X:
+// コンテキストメニュー切り取り処理
+                {
+                    InputConnection ic=getCurrentInputConnection();
+                    if(ic!=null){
+                        ic.performContextMenuAction(android.R.id.cut);
+                    }
+                }
+                break;
+            case C.Key.KEY_CTL_C:
+// コンテキストメニューコピー処理
+                {
+                    InputConnection ic=getCurrentInputConnection();
+                    if(ic!=null){
+                        ic.performContextMenuAction(android.R.id.copy);
+                    }
+                }
+                break;
+            case C.Key.KEY_CTL_V:
+// コンテキストメニュー貼り付け処理
+                {
+                    InputConnection ic=getCurrentInputConnection();
+                    if(ic!=null){
+                        ic.performContextMenuAction(android.R.id.paste);
+                    }
+                }
+                break;
+            case C.Key.KEY_CTL_I:
+// TABキー送信処理
+                sendDownUpKeyEvents(KeyEvent.KEYCODE_TAB);
+                break;
             default:
 // 通常文字キー処理
                 if(code>0){
