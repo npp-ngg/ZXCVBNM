@@ -303,6 +303,22 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
     }
 //
+// Mozc組成モード切替処理
+    private void switchMozcCompositionMode(ProtoCommands.CompositionMode mode) {
+        if(mozcSessionId!=0){
+            ProtoCommands.SessionCommand sessionCommand=ProtoCommands.SessionCommand.newBuilder()
+                .setType(ProtoCommands.SessionCommand.CommandType.SWITCH_COMPOSITION_MODE)
+                .setCompositionMode(mode)
+                .build();
+            ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                .setId(mozcSessionId)
+                .setType(ProtoCommands.Input.CommandType.SEND_COMMAND)
+                .setCommand(sessionCommand)
+                .build();
+            sendMozcCommandAsync(input);
+        }
+    }
+//
 // キーボードビューの生成処理
     @Override public View onCreateInputView() {
         keyboardView=getLayoutInflater().inflate(R.layout.keyboard,null);
@@ -829,11 +845,13 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // 英数モード切替処理
                 currentMode=MODE_ALPHABET;
                 updateKeyboardKeys();
+                switchMozcCompositionMode(ProtoCommands.CompositionMode.HALF_ASCII);
                 break;
             case C.Key.KEY_TO_KANA:
 // 日本語モード切替処理
                 currentMode=MODE_JAPANESE;
                 updateKeyboardKeys();
+                switchMozcCompositionMode(ProtoCommands.CompositionMode.HIRAGANA);
                 break;
             case C.Key.KEY_CTL_A:
 // コンテキストメニュー全選択処理
@@ -879,7 +897,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // 通常文字キー処理
                 if(code>0){
                     String inputStr=String.valueOf((char)code);
-                    if(currentMode==MODE_JAPANESE&&mozcSessionId!=0){
+                    if(mozcSessionId!=0){
                         ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
                             .setKeyString(inputStr)
                             .build();
