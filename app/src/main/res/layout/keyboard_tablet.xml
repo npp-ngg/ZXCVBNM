@@ -1059,6 +1059,7 @@
         app:btnCodeA="-4"
         app:btnCodeAS="-4"
         app:btnLabelJ="⏎"
+        app:btnLabelJS="⏎"
         app:btnCodeJ="-4"
         app:btnCodeJS="-4"
         app:btnLabelJP109="⏎"

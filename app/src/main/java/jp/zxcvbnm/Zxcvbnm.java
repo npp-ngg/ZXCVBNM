@@ -4,6 +4,7 @@ import android.app.Dialog;
 import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -24,6 +25,7 @@ import com.google.android.apps.inputmethod.libs.mozc.session.MozcJNI;
 import org.mozc.android.inputmethod.japanese.MozcLog;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoConfig;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -177,6 +179,20 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         mozcExecutor.execute(new Runnable() {
             @Override public void run() {
                 try{
+// Mozc環境設定 (suggestions_size=10, use_emoji_conversion=true) の反映
+                    ProtoConfig.Config config=ProtoConfig.Config.newBuilder()
+                        .setSuggestionsSize(C.Mozc.suggestionsSize)
+                        .setUseEmojiConversion(true)
+                        .build();
+                    ProtoCommands.Input configInput=ProtoCommands.Input.newBuilder()
+                        .setType(ProtoCommands.Input.CommandType.SET_CONFIG)
+                        .setConfig(config)
+                        .build();
+                    ProtoCommands.Command configCmd=ProtoCommands.Command.newBuilder()
+                        .setInput(configInput)
+                        .build();
+                    MozcJNI.evalCommand(configCmd.toByteArray());
+// セッション生成処理
                     ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
                         .setType(ProtoCommands.Input.CommandType.CREATE_SESSION)
                         .build();
@@ -313,6 +329,15 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
     }
 //
+// モードに応じたスペース文字送信処理 (日本語:全角スペース, 英字:半角スペース)
+    private void sendSpaceText() {
+        if(currentMode==MODE_JAPANESE){
+            sendText("　");
+        }else{
+            sendText(" ");
+        }
+    }
+//
 // 特殊キーまたは標準キーイベント送信処理
     private void processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey specialKey,
         int androidKeyCode) {
@@ -327,7 +352,11 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 .build();
             sendMozcCommandAsync(input);
         }else{
-            sendDownUpKeyEvents(androidKeyCode);
+            if(specialKey==ProtoCommands.KeyEvent.SpecialKey.SPACE||androidKeyCode==KeyEvent.KEYCODE_SPACE){
+                sendSpaceText();
+            }else{
+                sendDownUpKeyEvents(androidKeyCode);
+            }
         }
     }
 //
@@ -623,8 +652,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         if(anchorView==null){
             anchorView=parentView;
         }
-        int candidateHeight=getResources().getDimensionPixelSize(R.dimen.candidate_height);
-        int popupWidth=parentView.getWidth();
+        int candidateHeight=getResources().getDimensionPixelSize(R.dimen.candidate_height);        int popupWidth=parentView.getWidth();
         if(popupWidth<=0){
             popupWidth=getResources().getDisplayMetrics().widthPixels;
         }
@@ -839,6 +867,20 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
     }
 //
+// Shift + Enter キーイベント送信処理
+    private void sendShiftEnter() {
+        InputConnection ic=getCurrentInputConnection();
+        if(ic!=null){
+            long now=SystemClock.uptimeMillis();
+            KeyEvent downEvent=new KeyEvent(now,now,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_ENTER,
+                0,KeyEvent.META_SHIFT_ON);
+            KeyEvent upEvent=new KeyEvent(now,now,KeyEvent.ACTION_UP,KeyEvent.KEYCODE_ENTER,
+                0,KeyEvent.META_SHIFT_ON);
+            ic.sendKeyEvent(downEvent);
+            ic.sendKeyEvent(upEvent);
+        }
+    }
+//
 // キーアクション共通処理
     private void processKeyAction(int code,String label) {
         if(label!=null&&label.contains("\n")){
@@ -852,8 +894,14 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 break;
             case C.Key.KEY_DONE:
 // エンターキー処理
-                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.ENTER,
-                    KeyEvent.KEYCODE_ENTER);
+                if(isShifted&&!isComposing){
+                    sendShiftEnter();
+                    isShifted=false;
+                    updateKeyboardKeys();
+                }else{
+                    processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.ENTER,
+                        KeyEvent.KEYCODE_ENTER);
+                }
                 break;
             case C.Key.KEY_DELETE:
 // バックスペースキー処理
@@ -998,7 +1046,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
     }
 //
 // 入力モードトグル切替処理
-    private void toggleInputMode() {
+    private void  toggleInputMode() {
         if(currentMode==MODE_ALPHABET){
             currentMode=MODE_JAPANESE;
             switchMozcCompositionMode(ProtoCommands.CompositionMode.HIRAGANA);
@@ -1087,6 +1135,10 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 return true;
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                if(event.isShiftPressed()&&!isComposing){
+                    sendShiftEnter();
+                    return true;
+                }
                 processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.ENTER,
                     KeyEvent.KEYCODE_ENTER);
                 return true;
@@ -1167,6 +1219,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             String inputStr=String.valueOf((char)unicodeChar);
             if(mozcSessionId!=0){
                 ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
+                    .setKeyCode(unicodeChar)
                     .setKeyString(inputStr)
                     .build();
                 ProtoCommands.Input input=ProtoCommands.Input.newBuilder()

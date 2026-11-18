@@ -13,7 +13,7 @@ final class C{
     static final class Mozc{
         static final String mozcDataFile="mozc.data";
         static final String mozcChildDir=".mozc";
-        static final int suggestionsSize=15;
+        static final int suggestionsSize=10;
         static final int candidatesSizeLimit=30;
         static final int sessionKeymap=ProtoConfig.Config.SessionKeymap.MSIME_VALUE;
         static final String userDictionaryName="_USER_DICTIONARY_";
