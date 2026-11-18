@@ -4,6 +4,7 @@ import android.app.Dialog;
 import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -24,6 +25,7 @@ import com.google.android.apps.inputmethod.libs.mozc.session.MozcJNI;
 import org.mozc.android.inputmethod.japanese.MozcLog;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoConfig;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -177,6 +179,20 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         mozcExecutor.execute(new Runnable() {
             @Override public void run() {
                 try{
+// Mozc環境設定 (suggestions_size=10, use_emoji_conversion=true) の反映
+                    ProtoConfig.Config config=ProtoConfig.Config.newBuilder()
+                        .setSuggestionsSize(C.Mozc.suggestionsSize)
+                        .setUseEmojiConversion(true)
+                        .build();
+                    ProtoCommands.Input configInput=ProtoCommands.Input.newBuilder()
+                        .setType(ProtoCommands.Input.CommandType.SET_CONFIG)
+                        .setConfig(config)
+                        .build();
+                    ProtoCommands.Command configCmd=ProtoCommands.Command.newBuilder()
+                        .setInput(configInput)
+                        .build();
+                    MozcJNI.evalCommand(configCmd.toByteArray());
+// セッション生成処理
                     ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
                         .setType(ProtoCommands.Input.CommandType.CREATE_SESSION)
                         .build();
@@ -313,6 +329,15 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
     }
 //
+// モードに応じたスペース文字送信処理 (日本語:全角スペース, 英字:半角スペース)
+    private void sendSpaceText() {
+        if(currentMode==MODE_JAPANESE){
+            sendText("　");
+        }else{
+            sendText(" ");
+        }
+    }
+//
 // 特殊キーまたは標準キーイベント送信処理
     private void processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey specialKey,
         int androidKeyCode) {
@@ -327,7 +352,11 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 .build();
             sendMozcCommandAsync(input);
         }else{
-            sendDownUpKeyEvents(androidKeyCode);
+            if(specialKey==ProtoCommands.KeyEvent.SpecialKey.SPACE||androidKeyCode==KeyEvent.KEYCODE_SPACE){
+                sendSpaceText();
+            }else{
+                sendDownUpKeyEvents(androidKeyCode);
+            }
         }
     }
 //
@@ -505,25 +534,31 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         if(targetView==null){
             return;
         }
+        int[] winLoc=new int[2];
+        if(keyboardView!=null){
+            keyboardView.getLocationOnScreen(winLoc);
+        }
         int[] loc=new int[2];
         targetView.getLocationOnScreen(loc);
-        int top=loc[1];
+        int localLeft=loc[0]-winLoc[0];
+        int localTop=loc[1]-winLoc[1];
         int width=targetView.getWidth();
         int height=targetView.getHeight();
+        int top=loc[1];
 //
         outInsets.touchableInsets=InputMethodService.Insets.TOUCHABLE_INSETS_REGION;
-        outInsets.touchableRegion.set(0,0,width,height);
+        outInsets.touchableRegion.set(localLeft,localTop,localLeft+width,localTop+height);
 //
         if(candidatePopup!=null&&candidatePopup.isShowing()&&candidatePopupView!=null){
             int[] candLoc=new int[2];
             candidatePopupView.getLocationOnScreen(candLoc);
-            int candLeft=candLoc[0];
-            int candTop=candLoc[1];
+            int candLeft=candLoc[0]-winLoc[0];
+            int candTop=candLoc[1]-winLoc[1];
             int candRight=candLeft+candidatePopupView.getWidth();
             int candBottom=candTop+candidatePopupView.getHeight();
             outInsets.touchableRegion.union(new android.graphics.Rect(candLeft,candTop,candRight,candBottom));
-            if(candTop<top){
-                top=candTop;
+            if(candLoc[1]<top){
+                top=candLoc[1];
             }
         }
 //
@@ -532,9 +567,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             outInsets.contentTopInsets=displayHeight;
             outInsets.visibleTopInsets=displayHeight;
         }else{
-            int[] winLoc=new int[2];
             if(keyboardView!=null){
-                keyboardView.getLocationOnScreen(winLoc);
                 int topOffset=top-winLoc[1];
                 outInsets.contentTopInsets=Math.max(0,topOffset);
                 outInsets.visibleTopInsets=Math.max(0,topOffset);
@@ -571,13 +604,23 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 //
 // 候補ウィンドウ位置更新処理
     private void updateCandidateWindowPosition() {
-        if(candidatePopup!=null&&candidatePopup.isShowing()&&keyboardView!=null){
+        if(candidatePopup!=null&&candidatePopup.isShowing()){
+            View parentView=keyboardView;
+            if(parentView==null){
+                Dialog dialog=getWindow();
+                if(dialog!=null&&dialog.getWindow()!=null){
+                    parentView=dialog.getWindow().getDecorView();
+                }
+            }
+            if(parentView==null){
+                return;
+            }
             View anchorView=findAnchorView();
             if(anchorView==null){
-                anchorView=keyboardView;
+                anchorView=parentView;
             }
             int candidateHeight=getResources().getDimensionPixelSize(R.dimen.candidate_height);
-            int popupWidth=keyboardView.getWidth();
+            int popupWidth=parentView.getWidth();
             if(popupWidth<=0){
                 popupWidth=getResources().getDisplayMetrics().widthPixels;
             }
@@ -595,15 +638,21 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
             dismissCandidateWindow();
             return;
         }
-        if(keyboardView==null||keyboardView.getWindowToken()==null){
+        View parentView=keyboardView;
+        if(parentView==null||parentView.getWindowToken()==null){
+            Dialog dialog=getWindow();
+            if(dialog!=null&&dialog.getWindow()!=null){
+                parentView=dialog.getWindow().getDecorView();
+            }
+        }
+        if(parentView==null||parentView.getWindowToken()==null){
             return;
         }
         View anchorView=findAnchorView();
         if(anchorView==null){
-            anchorView=keyboardView;
+            anchorView=parentView;
         }
-        int candidateHeight=getResources().getDimensionPixelSize(R.dimen.candidate_height);
-        int popupWidth=keyboardView.getWidth();
+        int candidateHeight=getResources().getDimensionPixelSize(R.dimen.candidate_height);        int popupWidth=parentView.getWidth();
         if(popupWidth<=0){
             popupWidth=getResources().getDisplayMetrics().widthPixels;
         }
@@ -632,7 +681,7 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }else{
             candidatePopup.setWidth(popupWidth);
             candidatePopup.setHeight(candidateHeight);
-            candidatePopup.showAtLocation(keyboardView,Gravity.NO_GRAVITY,x,y);
+            candidatePopup.showAtLocation(parentView,Gravity.NO_GRAVITY,x,y);
         }
     }
 //
@@ -818,6 +867,20 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
     }
 //
+// Shift + Enter キーイベント送信処理
+    private void sendShiftEnter() {
+        InputConnection ic=getCurrentInputConnection();
+        if(ic!=null){
+            long now=SystemClock.uptimeMillis();
+            KeyEvent downEvent=new KeyEvent(now,now,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_ENTER,
+                0,KeyEvent.META_SHIFT_ON);
+            KeyEvent upEvent=new KeyEvent(now,now,KeyEvent.ACTION_UP,KeyEvent.KEYCODE_ENTER,
+                0,KeyEvent.META_SHIFT_ON);
+            ic.sendKeyEvent(downEvent);
+            ic.sendKeyEvent(upEvent);
+        }
+    }
+//
 // キーアクション共通処理
     private void processKeyAction(int code,String label) {
         if(label!=null&&label.contains("\n")){
@@ -831,8 +894,14 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 break;
             case C.Key.KEY_DONE:
 // エンターキー処理
-                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.ENTER,
-                    KeyEvent.KEYCODE_ENTER);
+                if(isShifted&&!isComposing){
+                    sendShiftEnter();
+                    isShifted=false;
+                    updateKeyboardKeys();
+                }else{
+                    processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.ENTER,
+                        KeyEvent.KEYCODE_ENTER);
+                }
                 break;
             case C.Key.KEY_DELETE:
 // バックスペースキー処理
@@ -946,6 +1015,264 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
                 }
                 break;
         }
+    }
+//
+// システムキー判定処理
+    private boolean isSystemKey(int keyCode) {
+        switch(keyCode){
+            case KeyEvent.KEYCODE_BACK:
+            case KeyEvent.KEYCODE_HOME:
+            case KeyEvent.KEYCODE_MENU:
+            case KeyEvent.KEYCODE_VOLUME_UP:
+            case KeyEvent.KEYCODE_VOLUME_DOWN:
+            case KeyEvent.KEYCODE_VOLUME_MUTE:
+            case KeyEvent.KEYCODE_CALL:
+            case KeyEvent.KEYCODE_ENDCALL:
+            case KeyEvent.KEYCODE_APP_SWITCH:
+                return true;
+        }
+        return false;
+    }
+//
+// モード切替ショートカットキー判定処理 (Shift+Space, Ctrl+Space, Alt+Grave)
+    private boolean isModeToggleShortcut(int keyCode,KeyEvent event) {
+        if(keyCode==KeyEvent.KEYCODE_SPACE&&(event.isShiftPressed()||event.isCtrlPressed())){
+            return true;
+        }
+        if(keyCode==KeyEvent.KEYCODE_GRAVE&&event.isAltPressed()){
+            return true;
+        }
+        return false;
+    }
+//
+// 入力モードトグル切替処理
+    private void  toggleInputMode() {
+        if(currentMode==MODE_ALPHABET){
+            currentMode=MODE_JAPANESE;
+            switchMozcCompositionMode(ProtoCommands.CompositionMode.HIRAGANA);
+        }else{
+            currentMode=MODE_ALPHABET;
+            switchMozcCompositionMode(ProtoCommands.CompositionMode.HALF_ASCII);
+        }
+        updateKeyboardKeys();
+    }
+//
+// Mozcへ特殊キー非同期送信処理
+    private void sendSpecialKeyToMozc(ProtoCommands.KeyEvent.SpecialKey specialKey) {
+        if(mozcSessionId!=0){
+            ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
+                .setSpecialKey(specialKey)
+                .build();
+            ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                .setId(mozcSessionId)
+                .setType(ProtoCommands.Input.CommandType.SEND_KEY)
+                .setKey(keyEvent)
+                .build();
+            sendMozcCommandAsync(input);
+        }
+    }
+//
+// ハードウェアキー押下イベント処理
+    @Override public boolean onKeyDown(int keyCode,KeyEvent event) {
+        if(event.isSystem()||isSystemKey(keyCode)){
+            return super.onKeyDown(keyCode,event);
+        }
+// モード切替ショートカットキー判定
+        if(isModeToggleShortcut(keyCode,event)){
+            toggleInputMode();
+            return true;
+        }
+// 単体モード切替キー判定
+        switch(keyCode){
+            case KeyEvent.KEYCODE_ZENKAKU_HANKAKU:
+                toggleInputMode();
+                return true;
+            case KeyEvent.KEYCODE_EISU:
+                currentMode=MODE_ALPHABET;
+                updateKeyboardKeys();
+                switchMozcCompositionMode(ProtoCommands.CompositionMode.HALF_ASCII);
+                return true;
+            case KeyEvent.KEYCODE_KANA:
+            case KeyEvent.KEYCODE_KATAKANA_HIRAGANA:
+                currentMode=MODE_JAPANESE;
+                updateKeyboardKeys();
+                switchMozcCompositionMode(ProtoCommands.CompositionMode.HIRAGANA);
+                return true;
+        }
+// 英数モード時の非変換中キー処理
+        if(currentMode==MODE_ALPHABET&&!isComposing){
+            return super.onKeyDown(keyCode,event);
+        }
+// Ctrlキーショートカット処理 (Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V)
+        if(event.isCtrlPressed()){
+            switch(keyCode){
+                case KeyEvent.KEYCODE_A:
+                    processKeyAction(C.Key.KEY_CTL_A,null);
+                    return true;
+                case KeyEvent.KEYCODE_C:
+                    processKeyAction(C.Key.KEY_CTL_C,null);
+                    return true;
+                case KeyEvent.KEYCODE_X:
+                    processKeyAction(C.Key.KEY_CTL_X,null);
+                    return true;
+                case KeyEvent.KEYCODE_V:
+                    processKeyAction(C.Key.KEY_CTL_V,null);
+                    return true;
+            }
+            if(!isComposing){
+                return super.onKeyDown(keyCode,event);
+            }
+        }
+// 特殊制御キー処理 (Backspace, Delete, Enter, Space, 方向キー, F6-F10等)
+        switch(keyCode){
+            case KeyEvent.KEYCODE_DEL:
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.BACKSPACE,
+                    KeyEvent.KEYCODE_DEL);
+                return true;
+            case KeyEvent.KEYCODE_FORWARD_DEL:
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.DEL,
+                    KeyEvent.KEYCODE_FORWARD_DEL);
+                return true;
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                if(event.isShiftPressed()&&!isComposing){
+                    sendShiftEnter();
+                    return true;
+                }
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.ENTER,
+                    KeyEvent.KEYCODE_ENTER);
+                return true;
+            case KeyEvent.KEYCODE_SPACE:
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.SPACE,
+                    KeyEvent.KEYCODE_SPACE);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.LEFT,
+                    KeyEvent.KEYCODE_DPAD_LEFT);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.RIGHT,
+                    KeyEvent.KEYCODE_DPAD_RIGHT);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_UP:
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.UP,
+                    KeyEvent.KEYCODE_DPAD_UP);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.DOWN,
+                    KeyEvent.KEYCODE_DPAD_DOWN);
+                return true;
+            case KeyEvent.KEYCODE_HENKAN:
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.HENKAN,
+                    KeyEvent.KEYCODE_HENKAN);
+                return true;
+            case KeyEvent.KEYCODE_MUHENKAN:
+                processSpecialOrKeyEvent(ProtoCommands.KeyEvent.SpecialKey.MUHENKAN,
+                    KeyEvent.KEYCODE_MUHENKAN);
+                return true;
+            case KeyEvent.KEYCODE_ESCAPE:
+                if(isComposing&&mozcSessionId!=0){
+                    sendSpecialKeyToMozc(ProtoCommands.KeyEvent.SpecialKey.ESCAPE);
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_TAB:
+                if(isComposing&&mozcSessionId!=0){
+                    sendSpecialKeyToMozc(ProtoCommands.KeyEvent.SpecialKey.TAB);
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_F6:
+                if(isComposing&&mozcSessionId!=0){
+                    sendSpecialKeyToMozc(ProtoCommands.KeyEvent.SpecialKey.F6);
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_F7:
+                if(isComposing&&mozcSessionId!=0){
+                    sendSpecialKeyToMozc(ProtoCommands.KeyEvent.SpecialKey.F7);
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_F8:
+                if(isComposing&&mozcSessionId!=0){
+                    sendSpecialKeyToMozc(ProtoCommands.KeyEvent.SpecialKey.F8);
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_F9:
+                if(isComposing&&mozcSessionId!=0){
+                    sendSpecialKeyToMozc(ProtoCommands.KeyEvent.SpecialKey.F9);
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_F10:
+                if(isComposing&&mozcSessionId!=0){
+                    sendSpecialKeyToMozc(ProtoCommands.KeyEvent.SpecialKey.F10);
+                    return true;
+                }
+                break;
+        }
+// 通常文字キー入力処理
+        int unicodeChar=event.getUnicodeChar();
+        if(unicodeChar!=0&&!Character.isISOControl(unicodeChar)){
+            String inputStr=String.valueOf((char)unicodeChar);
+            if(mozcSessionId!=0){
+                ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
+                    .setKeyCode(unicodeChar)
+                    .setKeyString(inputStr)
+                    .build();
+                ProtoCommands.Input input=ProtoCommands.Input.newBuilder()
+                    .setId(mozcSessionId)
+                    .setType(ProtoCommands.Input.CommandType.SEND_KEY)
+                    .setKey(keyEvent)
+                    .build();
+                sendMozcCommandAsync(input);
+            }else{
+                sendText(inputStr);
+            }
+            return true;
+        }
+        return super.onKeyDown(keyCode,event);
+    }
+//
+// ハードウェアキー離脱イベント処理
+    @Override public boolean onKeyUp(int keyCode,KeyEvent event) {
+        if(event.isSystem()||isSystemKey(keyCode)){
+            return super.onKeyUp(keyCode,event);
+        }
+        if(isModeToggleShortcut(keyCode,event)){
+            return true;
+        }
+        switch(keyCode){
+            case KeyEvent.KEYCODE_ZENKAKU_HANKAKU:
+            case KeyEvent.KEYCODE_EISU:
+            case KeyEvent.KEYCODE_KANA:
+            case KeyEvent.KEYCODE_KATAKANA_HIRAGANA:
+                return true;
+        }
+        if(currentMode==MODE_ALPHABET&&!isComposing){
+            return super.onKeyUp(keyCode,event);
+        }
+        int unicodeChar=event.getUnicodeChar();
+        if(unicodeChar!=0&&!Character.isISOControl(unicodeChar)){
+            return true;
+        }
+        switch(keyCode){
+            case KeyEvent.KEYCODE_DEL:
+            case KeyEvent.KEYCODE_FORWARD_DEL:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_HENKAN:
+            case KeyEvent.KEYCODE_MUHENKAN:
+                return true;
+        }
+        return super.onKeyUp(keyCode,event);
     }
 //
 // キーのクリックイベント処理
