@@ -17,6 +17,8 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.ExtractedText;
+import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import android.widget.FrameLayout;
 import android.widget.PopupWindow;
@@ -255,21 +257,44 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         if(output.hasPreedit()&&output.getPreedit().getSegmentCount()>0){
             ProtoCommands.Preedit preedit=output.getPreedit();
             StringBuilder sb=new StringBuilder();
+            int preeditLen=0;
             for(int i=0;i<preedit.getSegmentCount();i++){
-                sb.append(preedit.getSegment(i).getValue());
+                ProtoCommands.Preedit.Segment seg=preedit.getSegment(i);
+                if(seg!=null&&seg.hasValue()){
+                    String val=seg.getValue();
+                    sb.append(val);
+                    preeditLen+=val.length();
+                }
             }
             String preeditStr=sb.toString();
-            if(!preeditStr.isEmpty()){
+            if(preeditLen>0){
                 hasPreedit=true;
                 if(ic!=null){
                     ic.setComposingText(preeditStr,1);
                     if(preedit.hasCursor()){
                         int cursorInPreedit=preedit.getCursor();
-                        CharSequence beforeText=ic.getTextBeforeCursor(1000,0);
-                        if(beforeText!=null){
-                            int endPos=beforeText.length();
-                            int startPos=Math.max(0,endPos-preeditStr.length());
-                            int targetPos=startPos+cursorInPreedit;
+                        if(cursorInPreedit<0){
+                            cursorInPreedit=0;
+                        }
+                        if(cursorInPreedit>preeditLen){
+                            cursorInPreedit=preeditLen;
+                        }
+                        int curPos=-1;
+                        ExtractedText et=ic.getExtractedText(new ExtractedTextRequest(),0);
+                        if(et!=null){
+                            curPos=et.selectionEnd;
+                        }
+                        if(curPos<0){
+                            CharSequence textBefore=ic.getTextBeforeCursor(100000,0);
+                            if(textBefore!=null){
+                                curPos=textBefore.length();
+                            }
+                        }
+                        if(curPos>=0){
+                            int targetPos=curPos-preeditLen+cursorInPreedit;
+                            if(targetPos<0){
+                                targetPos=0;
+                            }
                             ic.setSelection(targetPos,targetPos);
                         }
                     }
