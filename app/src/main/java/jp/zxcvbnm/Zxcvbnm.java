@@ -1042,6 +1042,12 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
         }
     }
 //
+// 英語キーボード入力文字からかな文字への変換処理
+    private String convertUsKeyToKana(char ch) {
+        String kana=C.Keyboard.US_KEY_TO_KANA_MAP.get(ch);
+        return kana!=null?kana:String.valueOf(ch);
+    }
+//
 // システムキー判定処理
     private boolean isSystemKey(int keyCode) {
         switch(keyCode){
@@ -1241,10 +1247,15 @@ public class Zxcvbnm extends InputMethodService implements View.OnClickListener,
 // 通常文字キー入力処理
         int unicodeChar=event.getUnicodeChar();
         if(unicodeChar!=0&&!Character.isISOControl(unicodeChar)){
-            String inputStr=String.valueOf((char)unicodeChar);
+            char ch=(char)unicodeChar;
+            String inputStr;
+            if(currentMode!=MODE_ALPHABET){
+                inputStr=convertUsKeyToKana(ch);
+            }else{
+                inputStr=String.valueOf(ch);
+            }
             if(mozcSessionId!=0){
                 ProtoCommands.KeyEvent keyEvent=ProtoCommands.KeyEvent.newBuilder()
-                    .setKeyCode(unicodeChar)
                     .setKeyString(inputStr)
                     .build();
                 ProtoCommands.Input input=ProtoCommands.Input.newBuilder()

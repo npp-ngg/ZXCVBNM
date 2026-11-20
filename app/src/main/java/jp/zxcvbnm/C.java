@@ -1,6 +1,9 @@
 package jp.zxcvbnm;
 //
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoConfig;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 //
 final class C{
     static final String TAG="ZXCVBNM";
@@ -54,6 +57,60 @@ final class C{
     static final class Keyboard{
         static final int KEYBOARD_PHONE=0;
         static final int KEYBOARD_TABLET=1;
+        static final Map<Character,String> US_KEY_TO_KANA_MAP=createUsKeyToKanaMap();
+//
+// 英語キーボード配列かな変換テーブル生成処理
+        private static Map<Character,String> createUsKeyToKanaMap() {
+            Map<Character,String> map=new HashMap<>();
+            map.put('1',"ぬ");map.put('!',"ぬ");
+            map.put('2',"ふ");map.put('@',"ふ");
+            map.put('3',"あ");map.put('#',"ぁ");
+            map.put('4',"う");map.put('$',"ぅ");
+            map.put('5',"え");map.put('%',"ぇ");
+            map.put('6',"お");map.put('^',"ぉ");
+            map.put('7',"や");map.put('&',"ゃ");
+            map.put('8',"ゆ");map.put('*',"ゅ");
+            map.put('9',"よ");map.put('(',"ょ");
+            map.put('0',"わ");map.put(')',"を");
+            map.put('-',"ほ");map.put('_',"ほ");
+            map.put('=',"へ");map.put('+',"へ");
+            map.put('q',"た");map.put('Q',"た");
+            map.put('w',"て");map.put('W',"て");
+            map.put('e',"い");map.put('E',"ぃ");
+            map.put('r',"す");map.put('R',"す");
+            map.put('t',"か");map.put('T',"か");
+            map.put('y',"ん");map.put('Y',"ん");
+            map.put('u',"な");map.put('U',"な");
+            map.put('i',"に");map.put('I',"に");
+            map.put('o',"ら");map.put('O',"ら");
+            map.put('p',"せ");map.put('P',"せ");
+            map.put('[',"゛");map.put('{',"゛");
+            map.put(']',"゜");map.put('}',"「");
+            map.put('a',"ち");map.put('A',"ち");
+            map.put('s',"と");map.put('S',"と");
+            map.put('d',"し");map.put('D',"し");
+            map.put('f',"は");map.put('F',"は");
+            map.put('g',"き");map.put('G',"き");
+            map.put('h',"く");map.put('H',"く");
+            map.put('j',"ま");map.put('J',"ま");
+            map.put('k',"の");map.put('K',"の");
+            map.put('l',"り");map.put('L',"り");
+            map.put(';',"れ");map.put(':',"れ");
+            map.put('\'',"け");map.put('"',"け");
+            map.put('`',"む");map.put('~',"」");
+            map.put('z',"つ");map.put('Z',"っ");
+            map.put('x',"さ");map.put('X',"さ");
+            map.put('c',"そ");map.put('C',"そ");
+            map.put('v',"ひ");map.put('V',"ひ");
+            map.put('b',"こ");map.put('B',"こ");
+            map.put('n',"み");map.put('N',"み");
+            map.put('m',"も");map.put('M',"も");
+            map.put(',',"ね");map.put('<',"、");
+            map.put('.',"る");map.put('>',"。");
+            map.put('/',"め");map.put('?',"・");
+            map.put('\\',"ろ");map.put('|',"ー");
+            return Collections.unmodifiableMap(map);
+        }
     }
     static class Preferences{
         static int maxPhoneWidth=720;
